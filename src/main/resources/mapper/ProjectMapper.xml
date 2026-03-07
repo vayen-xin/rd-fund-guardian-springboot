@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vayen.rdcm.mapper.ProjectMapper">
+
+    <resultMap id="BaseResultMap" type="com.vayen.rdcm.entity.Project">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="status" property="status"/>
+        <result column="created_by" property="createdBy"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, start_time, end_time, status, created_by, created_at
+    </sql>
+
+    <!-- 查询所有项目 -->
+    <select id="findAll" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM project
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 按状态查询项目 -->
+    <select id="findByStatus" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM project
+        WHERE status = #{status}
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 根据创建人查询项目 -->
+    <select id="findByCreatedBy" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM project
+        WHERE created_by = #{createdBy}
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 根据 ID 查询项目 -->
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM project
+        WHERE id = #{id}
+    </select>
+
+    <!-- 插入项目 -->
+    <insert id="insert" parameterType="com.vayen.rdcm.entity.Project" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO project (name, start_time, status, created_by)
+        VALUES (#{name}, #{startTime}, #{status}, #{createdBy})
+    </insert>
+
+    <!-- 更新项目 -->
+    <update id="update" parameterType="com.vayen.rdcm.entity.Project">
+        UPDATE project
+        SET name = #{name},
+            start_time = #{startTime},
+            end_time = #{endTime},
+            status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 结束项目 -->
+    <update id="finishProject">
+        UPDATE project
+        SET end_time = #{endTime},
+            status = '已结束'
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除项目 -->
+    <delete id="delete" parameterType="long">
+        DELETE FROM project WHERE id = #{id}
+    </delete>
+
+</mapper>

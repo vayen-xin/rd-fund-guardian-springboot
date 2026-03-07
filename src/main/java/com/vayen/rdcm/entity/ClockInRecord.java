@@ -1,12 +1,14 @@
 package com.vayen.rdcm.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 打卡记录实体
  */
+@Data
 @Entity
 @Table(name = "clock_in_record")
 public class ClockInRecord {
@@ -31,20 +33,4 @@ public class ClockInRecord {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public Long getEmployeeId() { return employeeId; }
-    public void setEmployeeId(Long employeeId) { this.employeeId = employeeId; }
-
-    public LocalDateTime getClockInTime() { return clockInTime; }
-    public void setClockInTime(LocalDateTime clockInTime) { this.clockInTime = clockInTime; }
-
-    public BigDecimal getDurationHours() { return durationHours; }
-    public void setDurationHours(BigDecimal durationHours) { this.durationHours = durationHours; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

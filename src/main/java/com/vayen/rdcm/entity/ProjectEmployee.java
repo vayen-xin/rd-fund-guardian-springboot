@@ -1,12 +1,14 @@
 package com.vayen.rdcm.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 项目 - 员工关联实体
  */
+@Data
 @Entity
 @Table(name = "project_employee")
 public class ProjectEmployee {
@@ -31,20 +33,4 @@ public class ProjectEmployee {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public Long getProjectId() { return projectId; }
-    public void setProjectId(Long projectId) { this.projectId = projectId; }
-
-    public Long getEmployeeId() { return employeeId; }
-    public void setEmployeeId(Long employeeId) { this.employeeId = employeeId; }
-
-    public BigDecimal getCoefficient() { return coefficient; }
-    public void setCoefficient(BigDecimal coefficient) { this.coefficient = coefficient; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

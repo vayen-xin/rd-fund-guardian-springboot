@@ -1,12 +1,14 @@
 package com.vayen.rdcm.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 费用凭证实体
  */
+@Data
 @Entity
 @Table(name = "expense_voucher")
 public class ExpenseVoucher {
@@ -34,23 +36,4 @@ public class ExpenseVoucher {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public Long getSettlementId() { return settlementId; }
-    public void setSettlementId(Long settlementId) { this.settlementId = settlementId; }
-
-    public String getExpenseType() { return expenseType; }
-    public void setExpenseType(String expenseType) { this.expenseType = expenseType; }
-
-    public BigDecimal getAmount() { return amount; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
-
-    public String getVoucherFiles() { return voucherFiles; }
-    public void setVoucherFiles(String voucherFiles) { this.voucherFiles = voucherFiles; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

@@ -1,12 +1,14 @@
 package com.vayen.rdcm.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 项目结算实体
  */
+@Data
 @Entity
 @Table(name = "project_settlement")
 public class ProjectSettlement {
@@ -55,44 +57,4 @@ public class ProjectSettlement {
     protected void onCreate() {
         settledAt = LocalDateTime.now();
     }
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public Long getProjectId() { return projectId; }
-    public void setProjectId(Long projectId) { this.projectId = projectId; }
-
-    public BigDecimal getLaborCost() { return laborCost; }
-    public void setLaborCost(BigDecimal laborCost) { this.laborCost = laborCost; }
-
-    public BigDecimal getDirectInputCost() { return directInputCost; }
-    public void setDirectInputCost(BigDecimal directInputCost) { this.directInputCost = directInputCost; }
-
-    public BigDecimal getDepreciationCost() { return depreciationCost; }
-    public void setDepreciationCost(BigDecimal depreciationCost) { this.depreciationCost = depreciationCost; }
-
-    public BigDecimal getIntangibleAmortization() { return intangibleAmortization; }
-    public void setIntangibleAmortization(BigDecimal intangibleAmortization) { this.intangibleAmortization = intangibleAmortization; }
-
-    public BigDecimal getDesignTestCost() { return designTestCost; }
-    public void setDesignTestCost(BigDecimal designTestCost) { this.designTestCost = designTestCost; }
-
-    public BigDecimal getOutsourcingCost() { return outsourcingCost; }
-    public void setOutsourcingCost(BigDecimal outsourcingCost) { this.outsourcingCost = outsourcingCost; }
-
-    public BigDecimal getIpCost() { return ipCost; }
-    public void setIpCost(BigDecimal ipCost) { this.ipCost = ipCost; }
-
-    public BigDecimal getOtherCost() { return otherCost; }
-    public void setOtherCost(BigDecimal otherCost) { this.otherCost = otherCost; }
-
-    public BigDecimal getTotalAmount() { return totalAmount; }
-    public void setTotalAmount(BigDecimal totalAmount) { this.totalAmount = totalAmount; }
-
-    public Long getSettledBy() { return settledBy; }
-    public void setSettledBy(Long settledBy) { this.settledBy = settledBy; }
-
-    public LocalDateTime getSettledAt() { return settledAt; }
-    public void setSettledAt(LocalDateTime settledAt) { this.settledAt = settledAt; }
 }

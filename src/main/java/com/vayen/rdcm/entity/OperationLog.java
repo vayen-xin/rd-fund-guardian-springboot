@@ -1,11 +1,13 @@
 package com.vayen.rdcm.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
  * 操作日志实体
  */
+@Data
 @Entity
 @Table(name = "operation_log")
 public class OperationLog {
@@ -30,20 +32,4 @@ public class OperationLog {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public Long getOperatorId() { return operatorId; }
-    public void setOperatorId(Long operatorId) { this.operatorId = operatorId; }
-
-    public String getOperationType() { return operationType; }
-    public void setOperationType(String operationType) { this.operationType = operationType; }
-
-    public String getOperationDetail() { return operationDetail; }
-    public void setOperationDetail(String operationDetail) { this.operationDetail = operationDetail; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

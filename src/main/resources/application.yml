@@ -1,0 +1,66 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: RDCM
+  
+  # H2 Database Configuration
+  datasource:
+    url: jdbc:h2:tcp://localhost:9092/./data/rdcm_db
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        trace: false
+        web-allow-others: false
+  
+  # SQL Initialization
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:data.sql
+      continue-on-error: false
+
+# MyBatis Configuration
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: com.vayen.rdcm.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# Sa-Token Configuration
+sa-token:
+  # token 名称（同时也是 cookie 名称）
+  token-name: Authorization
+  # token 有效期，单位 s 默认 30 天，-1 代表永不过期
+  timeout: 2592000
+  # token 最低活跃频率 (单位：秒)，-1 代表无限制
+  activity-timeout: -1
+  # 是否允许同一账号并发登录 (为 true 时允许一起登录，为 false 时新登录挤掉旧登录)
+  is-concurrent: true
+  # 在多人登录同一账号时，是否共用一个 token (为 true 时所有登录共用一个 token，为 false 时每次登录新建一个 token)
+  is-share: false
+  # token 风格
+  token-style: uuid
+  # 是否输出操作日志
+  is-log: true
+  # 是否从 cookie 中读取 token
+  is-read-cookie: false
+  # 是否从 header 中读取 token
+  is-read-header: true
+  # token 前缀
+  token-prefix: Bearer
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    com.vayen.rdcm: DEBUG
+    org.mybatis: DEBUG

@@ -1,12 +1,14 @@
 package com.vayen.rdcm.entity;
 
 import jakarta.persistence.*;
+import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 设备库实体
  */
+@Data
 @Entity
 @Table(name = "equipment")
 public class Equipment {
@@ -31,20 +33,4 @@ public class Equipment {
     protected void onCreate() {
         createdAt = LocalDateTime.now();
     }
-
-    // Getters and Setters
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public BigDecimal getDepreciationRate() { return depreciationRate; }
-    public void setDepreciationRate(BigDecimal depreciationRate) { this.depreciationRate = depreciationRate; }
-
-    public Integer getStatus() { return status; }
-    public void setStatus(Integer status) { this.status = status; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
