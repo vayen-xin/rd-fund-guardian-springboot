@@ -23,7 +23,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
             SaRouter
                 .match("/**")    // 拦截所有路径
                 .notMatch("/api/auth/login", "/api/auth/register")  // 排除登录/注册接口
-                .notMatch("/h2-console/**")  // 排除 H2 Console
+
                 .check(r -> {
                     // 登录校验：未登录则抛出异常
                     // 后续可以根据不同路径设置不同权限
