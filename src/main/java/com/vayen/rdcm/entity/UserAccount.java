@@ -1,6 +1,9 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -8,28 +11,21 @@ import java.time.LocalDateTime;
  * 用户账号实体
  */
 @Data
-@Entity
-@Table(name = "user_account")
+@TableName("user_account")
 public class UserAccount {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "username", nullable = false, unique = true, length = 50)
+    @TableField("username")
     private String username;
 
-    @Column(name = "password_hash", nullable = false, length = 255)
+    @TableField("password_hash")
     private String passwordHash;
 
-    @Column(name = "status", columnDefinition = "INT DEFAULT 1 COMMENT '1 启用 0 停用'")
+    @TableField("status")
     private Integer status = 1;
 
-    @Column(name = "created_at", updatable = false)
+    @TableField("created_at")
     private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
 }
