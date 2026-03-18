@@ -1,36 +1,31 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 项目 - 员工关联实体
+ * 项目人员关联实体
  */
 @Data
-@Entity
-@Table(name = "project_employee")
+@TableName("project_employee")
 public class ProjectEmployee {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "project_id", nullable = false)
+    @TableField("project_id")
     private Long projectId;
 
-    @Column(name = "employee_id", nullable = false)
+    @TableField("employee_id")
     private Long employeeId;
 
-    @Column(name = "coefficient", nullable = false, precision = 5, scale = 4)
-    private BigDecimal coefficient; // 系数（如 0.7200 表示 72%）
+    @TableField("role_in_project")
+    private String roleInProject;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("linked_at")
+    private LocalDateTime linkedAt;
 }

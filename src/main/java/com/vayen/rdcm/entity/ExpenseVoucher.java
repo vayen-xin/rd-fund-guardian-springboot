@@ -1,39 +1,37 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 费用凭证实体
  */
 @Data
-@Entity
-@Table(name = "expense_voucher")
+@TableName("expense_voucher")
 public class ExpenseVoucher {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "settlement_id", nullable = false)
-    private Long settlementId;
+    @TableField("project_id")
+    private Long projectId;
 
-    @Column(name = "expense_type", nullable = false, length = 50)
-    private String expenseType; // 八类费用类型
+    @TableField("type")
+    private String type;
 
-    @Column(name = "amount", nullable = false, precision = 15, scale = 2)
-    private BigDecimal amount;
+    @TableField("amount")
+    private Double amount;
 
-    @Column(name = "voucher_files", columnDefinition = "JSON")
-    private String voucherFiles; // JSON 字符串：[{name, path, uploadTime}]
+    @TableField("description")
+    private String description;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @TableField("file_path")
+    private String filePath;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("create_time")
+    private LocalDateTime createTime;
 }

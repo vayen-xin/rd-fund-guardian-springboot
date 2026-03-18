@@ -1,36 +1,46 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
- * 设备库实体
+ * 设备实体
  */
 @Data
-@Entity
-@Table(name = "equipment")
+@TableName("equipment")
 public class Equipment {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 100)
+    @TableField("branch_id")
+    private Long branchId;
+
+    @TableField("equipment_id")
+    private String equipmentId;
+
+    @TableField("name")
     private String name;
 
-    @Column(name = "depreciation_rate", nullable = false, precision = 10, scale = 2)
-    private BigDecimal depreciationRate; // 折旧单价（元/小时）
+    @TableField("model")
+    private String model;
 
-    @Column(name = "status", columnDefinition = "INT DEFAULT 1")
-    private Integer status = 1;
+    @TableField("depreciation_rate")
+    private Double depreciationRate;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @TableField("status")
+    private Integer status;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("purchase_date")
+    private String purchaseDate;
+
+    @TableField("create_time")
+    private LocalDateTime createTime;
+
+    @TableField("update_time")
+    private LocalDateTime updateTime;
 }

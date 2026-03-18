@@ -1,42 +1,55 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
  * 项目实体
  */
 @Data
-@Entity
-@Table(name = "project")
+@TableName("project")
 public class Project {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 200)
+    @TableField("branch_id")
+    private Long branchId;
+
+    @TableField("name")
     private String name;
 
-    @Column(name = "start_time", nullable = false)
-    private LocalDate startTime;
+    @TableField("description")
+    private String description;
 
-    @Column(name = "end_time")
-    private LocalDate endTime;
+    @TableField("start_date")
+    private String startDate;
 
-    @Column(name = "status", length = 20)
-    private String status = "进行中"; // 进行中/已结束/已结算
+    @TableField("end_date")
+    private String endDate;
 
-    @Column(name = "created_by", nullable = false)
-    private Long createdBy; // 创建人 ID
+    @TableField("status")
+    private Integer status;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @TableField("amount")
+    private Double amount;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("settlement_proof")
+    private String settlementProof;
+
+    @TableField("create_user")
+    private Long createUser;
+
+    @TableField("create_time")
+    private LocalDateTime createTime;
+
+    @TableField("update_time")
+    private LocalDateTime updateTime;
+
+    @TableField("settle_time")
+    private LocalDateTime settleTime;
 }

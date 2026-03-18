@@ -1,36 +1,43 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 /**
  * 打卡记录实体
  */
 @Data
-@Entity
-@Table(name = "clock_in_record")
+@TableName("clock_in_record")
 public class ClockInRecord {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "employee_id", nullable = false)
-    private Long employeeId; // 逻辑关联，无外键
+    @TableField("branch_id")
+    private Long branchId;
 
-    @Column(name = "clock_in_time", nullable = false)
-    private LocalDateTime clockInTime;
+    @TableField("employee_id")
+    private Long employeeId;
 
-    @Column(name = "duration_hours", nullable = false, precision = 10, scale = 2)
-    private BigDecimal durationHours; // 工时（小时）
+    @TableField("work_date")
+    private String workDate;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @TableField("check_in")
+    private LocalDateTime checkIn;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("check_out")
+    private LocalDateTime checkOut;
+
+    @TableField("duration")
+    private Double duration;
+
+    @TableField("source")
+    private String source;
+
+    @TableField("create_time")
+    private LocalDateTime createTime;
 }

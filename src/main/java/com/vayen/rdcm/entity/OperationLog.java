@@ -1,6 +1,9 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -8,28 +11,27 @@ import java.time.LocalDateTime;
  * 操作日志实体
  */
 @Data
-@Entity
-@Table(name = "operation_log")
+@TableName("operation_log")
 public class OperationLog {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "operator_id", nullable = false)
-    private Long operatorId;
+    @TableField("user_id")
+    private Long userId;
 
-    @Column(name = "operation_type", nullable = false, length = 50)
-    private String operationType; // 操作类型
+    @TableField("branch_id")
+    private Long branchId;
 
-    @Column(name = "operation_detail", columnDefinition = "JSON")
-    private String operationDetail; // JSON 字符串：动态内容
+    @TableField("operation")
+    private String operation;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @TableField("content")
+    private String content;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("ip_address")
+    private String ipAddress;
+
+    @TableField("create_time")
+    private LocalDateTime createTime;
 }

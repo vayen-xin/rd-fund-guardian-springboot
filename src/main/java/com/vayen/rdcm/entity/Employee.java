@@ -1,35 +1,49 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 人员库实体
+ * 员工实体
  */
 @Data
-@Entity
-@Table(name = "employee")
+@TableName("employee")
 public class Employee {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "name", nullable = false, length = 50)
+    @TableField("branch_id")
+    private Long branchId;
+
+    @TableField("employee_id")
+    private String employeeId;
+
+    @TableField("name")
     private String name;
 
-    @Column(name = "type", nullable = false, length = 20)
-    private String type; // 正式/兼职
+    @TableField("gender")
+    private String gender;
 
-    @Column(name = "status", columnDefinition = "INT DEFAULT 1")
-    private Integer status = 1;
+    @TableField("phone")
+    private String phone;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
+    @TableField("position")
+    private String position;
 
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("employee_type")
+    private String employeeType;
+
+    @TableField("entry_date")
+    private String entryDate;
+
+    @TableField("create_time")
+    private LocalDateTime createTime;
+
+    @TableField("update_time")
+    private LocalDateTime updateTime;
 }

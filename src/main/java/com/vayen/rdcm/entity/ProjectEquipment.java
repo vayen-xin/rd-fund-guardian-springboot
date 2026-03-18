@@ -1,32 +1,28 @@
 package com.vayen.rdcm.entity;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 项目 - 设备关联实体
+ * 项目设备关联实体
  */
 @Data
-@Entity
-@Table(name = "project_equipment")
+@TableName("project_equipment")
 public class ProjectEquipment {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(type = IdType.AUTO)
     private Long id;
 
-    @Column(name = "project_id", nullable = false)
+    @TableField("project_id")
     private Long projectId;
 
-    @Column(name = "equipment_id", nullable = false)
-    private Long equipmentId;
+    @TableField("device_id")
+    private Long deviceId;
 
-    @Column(name = "created_at", updatable = false)
-    private LocalDateTime createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = LocalDateTime.now();
-    }
+    @TableField("linked_at")
+    private LocalDateTime linkedAt;
 }
