@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vayen.rdcm.mapper.UserMapper">
+
+    <resultMap id="BaseResultMap" type="com.vayen.rdcm.entity.UserAccount">
+        <id column="id" property="id"/>
+        <result column="username" property="username"/>
+        <result column="password_hash" property="passwordHash"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, username, password_hash, status, created_at
+    </sql>
+
+    <!-- 根据用户名查询用户 -->
+    <select id="findByUsername" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user_account
+        WHERE username = #{username}
+    </select>
+
+    <!-- 根据 ID 查询用户 -->
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM user_account
+        WHERE id = #{id}
+    </select>
+
+    <!-- 插入用户 -->
+    <insert id="insert" parameterType="com.vayen.rdcm.entity.UserAccount" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO user_account (username, password_hash, status)
+        VALUES (#{username}, #{passwordHash}, #{status})
+    </insert>
+
+    <!-- 更新用户 -->
+    <update id="update" parameterType="com.vayen.rdcm.entity.UserAccount">
+        UPDATE user_account
+        SET username = #{username},
+            password_hash = #{passwordHash},
+            status = #{status}
+        WHERE id = #{id}
+    </update>
+
+</mapper>

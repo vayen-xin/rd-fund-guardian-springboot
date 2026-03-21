@@ -1,0 +1,162 @@
+package com.vayen.rdcm.service;
+
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.vayen.rdcm.entity.ProjectMonthlyData;
+import com.vayen.rdcm.entity.ProjectSettlement;
+import com.vayen.rdcm.mapper.ProjectSettlementMapper;
+import com.vayen.rdcm.util.JsonUtils;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 结算服务（核心业务逻辑）
+ */
+@Service
+@Slf4j
+public class SettlementService {
+    
+    private static final BigDecimal OTHER_COST_RATIO_LIMIT = BigDecimal.valueOf(0.20);
+    private static final BigDecimal OUTSOURCED_DISCOUNT = BigDecimal.valueOf(0.80);
+    
+    @Autowired
+    private ProjectMonthlyDataService monthlyDataService;
+    
+    @Autowired
+    private ProjectSettlementMapper settlementMapper;
+    
+    private LocalDateTime toStartOfMonth(LocalDate month) {
+        return month.atTime(0, 0, 0);
+    }
+    
+    @Transactional(rollbackFor = Exception.class)
+    public ProjectSettlement createSettlement(Long projectId, LocalDate settlementMonth, Long operatorId) {
+        LocalDateTime settlementMonthStart = toStartOfMonth(settlementMonth);
+        
+        ProjectMonthlyData monthlyData = monthlyDataService.getProjectMonthlyData(projectId, settlementMonth);
+        if (monthlyData == null) {
+            throw new RuntimeException("当月无数据，请先录入费用");
+        }
+        
+        if (!"finalized".equals(monthlyData.getStatus())) {
+            throw new RuntimeException("月度数据未定稿，不能结算");
+        }
+        
+        validateOtherCostRatio(monthlyData);
+        validateOutsourcedCost(monthlyData);
+        
+        if (settlementMapper.existsByProjectIdAndMonth(projectId, settlementMonth)) {
+            throw new RuntimeException("该月份已存在结算记录");
+        }
+        
+        ProjectSettlement settlement = new ProjectSettlement();
+        settlement.setProjectId(projectId);
+        settlement.setSettlementMonth(settlementMonthStart);
+        settlement.setTotalAmount(monthlyData.getGrandTotal());
+        settlement.setStatus("approved");
+        settlement.setVersion(1);
+        settlement.setCreatedBy(operatorId);
+        settlement.setCreatedAt(LocalDateTime.now());
+        settlement.setUpdatedAt(LocalDateTime.now());
+        
+        settlementMapper.insert(settlement);
+        
+        monthlyData.setStatus("settled");
+        monthlyData.setUpdatedAt(LocalDateTime.now());
+        monthlyDataService.saveOrUpdate(monthlyData);
+        
+        log.info("项目结算成功: projectId={}, month={}, operatorId={}", projectId, settlementMonth, operatorId);
+        
+        return settlement;
+    }
+    
+    private void validateOtherCostRatio(ProjectMonthlyData data) {
+        BigDecimal otherCost = BigDecimal.valueOf(data.getOtherTotal() != null ? data.getOtherTotal() : 0);
+        BigDecimal grandTotal = BigDecimal.valueOf(data.getGrandTotal() != null ? data.getGrandTotal() : 0);
+        
+        if (grandTotal.compareTo(BigDecimal.ZERO) == 0) {
+            return;
+        }
+        
+        BigDecimal ratio = otherCost.divide(grandTotal, 4, BigDecimal.ROUND_HALF_UP);
+        
+        if (ratio.compareTo(OTHER_COST_RATIO_LIMIT) > 0) {
+            throw new RuntimeException(String.format(
+                "其他费用占比%.2f%%超过20%%限制", ratio.multiply(BigDecimal.valueOf(100))
+            ));
+        }
+    }
+    
+    private void validateOutsourcedCost(ProjectMonthlyData data) {
+        try {
+            JsonUtils.CostData parsed = JsonUtils.parseCostData(data.getCostData());
+            List<Map<String, Object>> outsourcedItems = (List<Map<String, Object>>) 
+                parsed.getData().get("outsourced");
+            
+            if (outsourcedItems == null || outsourcedItems.isEmpty()) {
+                return;
+            }
+            
+            for (Map<String, Object> item : outsourcedItems) {
+                double originalAmount = ((Number) item.getOrDefault("original_amount", 0)).doubleValue();
+                double actualAmount = ((Number) item.getOrDefault("amount", 0)).doubleValue();
+                
+                if (originalAmount > 0) {
+                    BigDecimal expected = BigDecimal.valueOf(originalAmount).multiply(OUTSOURCED_DISCOUNT);
+                    BigDecimal actual = BigDecimal.valueOf(actualAmount);
+                    
+                    BigDecimal diff = actual.subtract(expected).abs();
+                    if (diff.compareTo(BigDecimal.valueOf(0.01)) > 0) {
+                        throw new RuntimeException(String.format(
+                            "外包费用未按80%折算：原始%.2f，折后%.2f，期望%.2f", 
+                            originalAmount, actualAmount, expected.doubleValue()
+                        ));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("外包费用校验异常: {}", e.getMessage());
+        }
+    }
+    
+    @Transactional(rollbackFor = Exception.class)
+    public ProjectSettlement reSettle(Long projectId, LocalDate settlementMonth, Long operatorId) {
+        LocalDateTime settlementMonthStart = toStartOfMonth(settlementMonth);
+        
+        QueryWrapper<ProjectSettlement> wrapper = new QueryWrapper<>();
+        wrapper.eq("project_id", projectId)
+               .eq("settlement_month", settlementMonthStart);
+        ProjectSettlement settlement = settlementMapper.selectOne(wrapper);
+        
+        if (settlement == null) {
+            throw new RuntimeException("结算记录不存在");
+        }
+        
+        if (!"approved".equals(settlement.getStatus()) && !"rejected".equals(settlement.getStatus())) {
+            throw new RuntimeException("当前状态不允许重算");
+        }
+        
+        ProjectMonthlyData monthlyData = monthlyDataService.getProjectMonthlyData(projectId, settlementMonth);
+        if (monthlyData == null) {
+            throw new RuntimeException("月度数据不存在");
+        }
+        
+        validateOtherCostRatio(monthlyData);
+        validateOutsourcedCost(monthlyData);
+        
+        settlement.setTotalAmount(monthlyData.getGrandTotal());
+        settlement.setStatus("re_settled");
+        settlement.setUpdatedAt(LocalDateTime.now());
+        
+        settlementMapper.updateById(settlement);
+        
+        return settlement;
+    }
+}

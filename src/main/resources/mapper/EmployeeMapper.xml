@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.vayen.rdcm.mapper.EmployeeMapper">
+
+    <resultMap id="BaseResultMap" type="com.vayen.rdcm.entity.Employee">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="type" property="type"/>
+        <result column="status" property="status"/>
+        <result column="created_at" property="createdAt"/>
+    </resultMap>
+
+    <sql id="Base_Column_List">
+        id, name, type, status, created_at
+    </sql>
+
+    <!-- 查询所有启用的员工 -->
+    <select id="findAllActive" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM employee
+        WHERE status = 1
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 按类型查询员工 -->
+    <select id="findByType" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM employee
+        WHERE type = #{type}
+        AND status = 1
+    </select>
+
+    <!-- 根据 ID 查询员工 -->
+    <select id="findById" resultMap="BaseResultMap">
+        SELECT <include refid="Base_Column_List"/>
+        FROM employee
+        WHERE id = #{id}
+    </select>
+
+    <!-- 插入员工 -->
+    <insert id="insert" parameterType="com.vayen.rdcm.entity.Employee" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO employee (name, type, status)
+        VALUES (#{name}, #{type}, #{status})
+    </insert>
+
+    <!-- 更新员工 -->
+    <update id="update" parameterType="com.vayen.rdcm.entity.Employee">
+        UPDATE employee
+        SET name = #{name},
+            type = #{type},
+            status = #{status}
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除员工（逻辑删除） -->
+    <update id="delete" parameterType="long">
+        UPDATE employee
+        SET status = 0
+        WHERE id = #{id}
+    </update>
+
+</mapper>
