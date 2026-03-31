@@ -1,6 +1,7 @@
 package com.vayen.rdcm.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import cn.dev33.satoken.annotation.SaCheckRole;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.entity.Company;
 import com.vayen.rdcm.service.CompanyService;
@@ -13,6 +14,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/companies")
+@SaCheckRole("admin")
 public class CompanyController {
 
     private final CompanyService companyService;
@@ -24,8 +26,7 @@ public class CompanyController {
     /**
      * 获取所有公司
      */
-    @GetMapping
-    @SaCheckPermission("company:view")
+    @GetMapping("/getAllCompanies")
     public Result<List<Company>> getAllCompanies() {
         List<Company> list = companyService.getAllCompanies();
         return Result.success(list);
@@ -34,8 +35,8 @@ public class CompanyController {
     /**
      * 获取公司详情
      */
+    // @SaCheckRole("admin")
     @GetMapping("/{id}")
-    @SaCheckPermission("company:view")
     public Result<Company> getCompany(@PathVariable Long id) {
         Company company = companyService.getById(id);
         return Result.success(company);
@@ -44,9 +45,9 @@ public class CompanyController {
     /**
      * 创建公司
      */
-    @PostMapping
-    @SaCheckPermission("company:create")
+    @PostMapping("/creatCompany")
     public Result<Void> createCompany(@RequestBody Company company) {
+        company.setId(null);
         companyService.createCompany(company);
         return Result.success();
     }
@@ -55,7 +56,6 @@ public class CompanyController {
      * 更新公司
      */
     @PutMapping("/{id}")
-    @SaCheckPermission("company:edit")
     public Result<Void> updateCompany(@PathVariable Long id, @RequestBody Company company) {
         company.setId(id);
         companyService.updateCompany(company);
@@ -66,7 +66,6 @@ public class CompanyController {
      * 删除公司
      */
     @DeleteMapping("/{id}")
-    @SaCheckPermission("company:delete")
     public Result<Void> deleteCompany(@PathVariable Long id) {
         companyService.removeCompany(id);
         return Result.success();

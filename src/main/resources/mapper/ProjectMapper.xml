@@ -46,21 +46,38 @@
         WHERE id = #{id}
     </select>
 
-    <!-- 插入项目 -->
     <insert id="insert" parameterType="com.vayen.rdcm.entity.Project" useGeneratedKeys="true" keyProperty="id">
-        INSERT INTO project (name, start_time, status, created_by)
-        VALUES (#{name}, #{startTime}, #{status}, #{createdBy})
+        INSERT INTO project (
+        company_id,
+        project_name,
+        code,
+        status,
+        start_date,
+        manager_name,
+        manager_phone,
+        description
+        )
+        VALUES (
+        #{companyId},
+        #{projectName},
+        #{code},
+        #{status},
+        #{startDate},
+        #{managerName},
+        #{managerPhone},
+        #{description}
+        )
     </insert>
 
-    <!-- 更新项目 -->
-    <update id="update" parameterType="com.vayen.rdcm.entity.Project">
-        UPDATE project
-        SET name = #{name},
-            start_time = #{startTime},
-            end_time = #{endTime},
-            status = #{status}
-        WHERE id = #{id}
-    </update>
+<!--    &lt;!&ndash; 更新项目 &ndash;&gt;-->
+<!--    <update id="update" parameterType="com.vayen.rdcm.entity.Project">-->
+<!--        UPDATE project-->
+<!--        SET name = #{name},-->
+<!--            start_time = #{startTime},-->
+<!--            end_time = #{endTime},-->
+<!--            status = #{status}-->
+<!--        WHERE id = #{id}-->
+<!--    </update>-->
 
     <!-- 结束项目 -->
     <update id="finishProject">

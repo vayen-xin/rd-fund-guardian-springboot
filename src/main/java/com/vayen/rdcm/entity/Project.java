@@ -50,7 +50,4 @@ public class Project {
 
     @TableField("updated_at")
     private LocalDateTime updatedAt;
-
-    @TableField("created_by")
-    private Long createdBy;
 }

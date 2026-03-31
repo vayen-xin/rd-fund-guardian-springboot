@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.entity.Project;
 import com.vayen.rdcm.mapper.ProjectMapper;
+import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -20,10 +21,12 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/api/v1/projects")
+@AllArgsConstructor
 public class ProjectController {
 
-    @Autowired
-    private ProjectMapper projectMapper;
+
+    private final ProjectMapper projectMapper;
+
     
     /**
      * 获取当前用户companyId（辅助方法）
@@ -37,8 +40,7 @@ public class ProjectController {
     /**
      * 分页查询项目列表
      */
-    @GetMapping
-    @SaCheckPermission("project:view")
+    @GetMapping("/get")
     public Result<Page<Project>> getProjects(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -70,7 +72,6 @@ public class ProjectController {
      * 获取项目详情
      */
     @GetMapping("/{id}")
-    @SaCheckPermission("project:view")
     public Result<Project> getProject(@PathVariable Long id) {
         Project project = projectMapper.selectById(id);
         return Result.success(project);
@@ -79,8 +80,7 @@ public class ProjectController {
     /**
      * 创建项目
      */
-    @PostMapping
-    @SaCheckPermission("project:create")
+    @PostMapping("/create")
     public Result<Void> createProject(@RequestBody ProjectRequest request) {
         Long currentUserId = StpUtil.getLoginIdAsLong();
         Long companyId = getCurrentCompanyId();
@@ -92,8 +92,8 @@ public class ProjectController {
         project.setStatus("pending");
         project.setStartDate(request.getStartDate());
         project.setDescription(request.getDescription());
+        project.setManagerName(request.getManagerName());
         project.setManagerPhone(request.getManagerPhone());
-        project.setCreatedBy(currentUserId);
         
         projectMapper.insert(project);
         return Result.success();
@@ -103,7 +103,7 @@ public class ProjectController {
      * 更新项目
      */
     @PutMapping("/{id}")
-    @SaCheckPermission("project:edit")
+    // 没有设置空值判断，不需要修改字段请不传，勿传空值
     public Result<Void> updateProject(@PathVariable Long id, @RequestBody ProjectRequest request) {
         Project project = projectMapper.selectById(id);
         if (project == null) {
@@ -113,6 +113,7 @@ public class ProjectController {
         project.setProjectName(request.getProjectName());
         project.setCode(request.getCode());
         project.setDescription(request.getDescription());
+        project.setManagerName(request.getManagerName());
         project.setManagerPhone(request.getManagerPhone());
         project.setStartDate(request.getStartDate());
         
@@ -124,7 +125,6 @@ public class ProjectController {
      * 删除项目
      */
     @DeleteMapping("/{id}")
-    @SaCheckPermission("project:delete")
     public Result<Void> deleteProject(@PathVariable Long id) {
         projectMapper.deleteById(id);
         return Result.success();
@@ -134,7 +134,6 @@ public class ProjectController {
      * 更新项目状态
      */
     @PutMapping("/{id}/status")
-    @SaCheckPermission("project:edit")
     public Result<Void> updateStatus(
             @PathVariable Long id,
             @RequestParam String status) { // pending/ongoing/ended/settled
@@ -164,5 +163,6 @@ class ProjectRequest {
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private LocalDate startDate;
     private String description;
+    private String managerName ;
     private String managerPhone;
 }

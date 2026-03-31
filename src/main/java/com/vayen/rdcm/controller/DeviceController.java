@@ -1,6 +1,7 @@
 package com.vayen.rdcm.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
+import cn.dev33.satoken.stp.StpUtil;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.entity.Device;
 import com.vayen.rdcm.service.DeviceService;
@@ -20,22 +21,27 @@ public class DeviceController {
     public DeviceController(DeviceService deviceService) {
         this.deviceService = deviceService;
     }
-    
+
+    // 获取companyId辅助方法
+    private Long getCompanyId() {
+        Long userId = StpUtil.getLoginIdAsLong();
+        Object companyIdObj = StpUtil.getSessionByLoginId(userId).get("companyId");
+        return companyIdObj != null ? Long.parseLong(companyIdObj.toString()) : null;
+    }
+
     /**
      * 获取设备列表（可按公司筛选）
      */
     @GetMapping
-    @SaCheckPermission("device:view")
     public Result<List<Device>> getDevices(@RequestParam(required = false) Long companyId) {
         List<Device> list = deviceService.getAllDevices(companyId);
         return Result.success(list);
     }
-    
+
     /**
      * 创建设备
      */
     @PostMapping
-    @SaCheckPermission("device:create")
     public Result<Void> createDevice(@RequestBody Device device) {
         deviceService.createDevice(device);
         return Result.success();
@@ -45,7 +51,6 @@ public class DeviceController {
      * 更新设备
      */
     @PutMapping("/{id}")
-    @SaCheckPermission("device:edit")
     public Result<Void> updateDevice(@PathVariable Long id, @RequestBody Device device) {
         device.setId(id);
         deviceService.updateDevice(device);
@@ -56,7 +61,6 @@ public class DeviceController {
      * 删除设备
      */
     @DeleteMapping("/{id}")
-    @SaCheckPermission("device:delete")
     public Result<Void> deleteDevice(@PathVariable Long id) {
         deviceService.removeDevice(id);
         return Result.success();

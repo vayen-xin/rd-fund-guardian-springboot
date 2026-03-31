@@ -12,12 +12,12 @@ spring:
     username: root
     password: 123456
   
-  # SQL Initialization
-  sql:
-    init:
-      mode: always
-      schema-locations: classpath:schema-v4.sql, classpath:data.sql
-      continue-on-error: false
+#  # SQL Initialization
+#  sql:
+#    init:
+#      mode: always
+#      schema-locations: classpath:schema-v4.sql, classpath:data.sql
+#      continue-on-error: false
 
 # MyBatis-Plus Configuration
 mybatis-plus:
@@ -36,7 +36,7 @@ sa-token:
   is-share: false
   token-style: uuid
   is-log: true
-  is-read-cookie: false
+  is-read-cookie: true
   is-read-header: true
   token-prefix: Bearer
 

@@ -12,7 +12,9 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class LoginResponse {
 
-    private String username;
-    private String token;
     private Long userId;
+    private String username;
+    private String name;
+    private String role;
+    private String token;
 }
