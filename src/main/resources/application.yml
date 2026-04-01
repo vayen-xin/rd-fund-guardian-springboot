@@ -4,7 +4,8 @@ server:
 spring:
   application:
     name: RDCM
-  
+#  mvc:
+#    convert-empty-strings-to-null: true
   # MySQL Database Configuration
   datasource:
     url: jdbc:mysql://localhost:3306/rdcm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true

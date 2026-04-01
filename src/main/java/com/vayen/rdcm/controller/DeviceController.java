@@ -1,6 +1,5 @@
 package com.vayen.rdcm.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.stp.StpUtil;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.entity.Device;
@@ -32,8 +31,9 @@ public class DeviceController {
     /**
      * 获取设备列表（可按公司筛选）
      */
-    @GetMapping
-    public Result<List<Device>> getDevices(@RequestParam(required = false) Long companyId) {
+    @GetMapping("/getDevices")
+    public Result<List<Device>> getDevices() {
+        Long companyId = getCompanyId();
         List<Device> list = deviceService.getAllDevices(companyId);
         return Result.success(list);
     }
@@ -41,8 +41,9 @@ public class DeviceController {
     /**
      * 创建设备
      */
-    @PostMapping
+    @PostMapping("/createDevices")
     public Result<Void> createDevice(@RequestBody Device device) {
+        device.setId(null);
         deviceService.createDevice(device);
         return Result.success();
     }

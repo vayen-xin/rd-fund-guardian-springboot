@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.Data;
 import java.time.LocalDateTime;
 
@@ -41,15 +42,14 @@ public class Employee {
     @TableField("position")
     private String position;
 
-    @TableField("employee_type")
-    private String employeeType;
-
     @TableField("entry_date")
     private String entryDate;
 
-    @TableField("create_time")
-    private LocalDateTime createTime;
+    @TableField("created_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime createdAt;
 
-    @TableField("update_time")
-    private LocalDateTime updateTime;
+    @TableField("updated_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    private LocalDateTime updatedAt;
 }

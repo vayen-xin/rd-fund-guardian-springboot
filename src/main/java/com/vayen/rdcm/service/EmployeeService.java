@@ -21,4 +21,6 @@ public interface EmployeeService extends IService<Employee> {
      * 根据员工编号查询员工
      */
     Employee getByEmployeeId(String employeeId);
+
+    Employee getEmployeeById(Long id , Long companyId);
 }

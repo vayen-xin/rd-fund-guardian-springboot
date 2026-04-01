@@ -1,8 +1,12 @@
 package com.vayen.rdcm.entity;
 
-import com.baomidou.mybatisplus.annotation.*;
-import com.fasterxml.jackson.annotation.JsonFormat;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonFormat; // 引入注解
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 /**
@@ -24,19 +28,11 @@ public class Company {
     @TableField("status")
     private String status = "active";
 
-    // @TableField("created_at")
-    @TableField(value = "created_at",
-            insertStrategy = FieldStrategy.NEVER, // 插入时永不填充此字段，让数据库处理
-            updateStrategy = FieldStrategy.NEVER  // 更新时永不填充此字段
-    )
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField("created_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") // 用于处理JSON输入/输出格式
     private LocalDateTime createdAt;
 
-    // @TableField("updated_at")
-    @TableField(value = "updated_at",
-            insertStrategy = FieldStrategy.NEVER, // 插入时永不填充此字段，让数据库处理
-            updateStrategy = FieldStrategy.NEVER  // 更新时永不填充此字段，让数据库处理
-    )
-    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+    @TableField("updated_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") // 用于处理JSON输入/输出格式
     private LocalDateTime updatedAt;
 }

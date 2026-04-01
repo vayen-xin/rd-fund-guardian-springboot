@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.fasterxml.jackson.annotation.JsonFormat; // 引入注解
 import lombok.Data;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -49,8 +51,10 @@ public class Device {
     private String notes;
 
     @TableField("created_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") // 用于处理JSON输入/输出格式
     private LocalDateTime createdAt;
 
     @TableField("updated_at")
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss") // 用于处理JSON输入/输出格式
     private LocalDateTime updatedAt;
 }

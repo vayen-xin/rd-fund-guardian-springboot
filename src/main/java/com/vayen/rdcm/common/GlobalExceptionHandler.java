@@ -55,7 +55,7 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e) {
-        log.error("系统异常", e);
+        log.error("系统异常" + e.getMessage(), e);
         return Result.error(500, "系统异常：" + e.getMessage());
     }
 }
