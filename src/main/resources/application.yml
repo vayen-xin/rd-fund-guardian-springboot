@@ -41,6 +41,10 @@ sa-token:
   is-read-header: true
   token-prefix: Bearer
 
+app:
+  upload:
+    base-dir: ${APP_UPLOAD_BASE_DIR:./uploads}
+
 # 日志配置
 logging:
   level:

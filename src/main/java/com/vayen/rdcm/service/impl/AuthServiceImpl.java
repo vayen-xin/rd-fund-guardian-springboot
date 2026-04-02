@@ -1,54 +1,49 @@
 package com.vayen.rdcm.service.impl;
 
-import cn.dev33.satoken.secure.BCrypt;
 import cn.dev33.satoken.stp.StpUtil;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.vayen.rdcm.dto.LoginResponse;
 import com.vayen.rdcm.entity.SysUser;
 import com.vayen.rdcm.mapper.SysUserMapper;
+import com.vayen.rdcm.security.RoleConstants;
 import com.vayen.rdcm.service.AuthService;
-import lombok.AllArgsConstructor;
+import com.vayen.rdcm.service.SysUserService;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 @Service
 @Slf4j
-@AllArgsConstructor
-public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements AuthService  {
+@RequiredArgsConstructor
+public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> implements AuthService {
 
-    private final SysUserMapper sysUserMapper ;
+    private final SysUserService sysUserService;
 
+    /**
+     * 统一登录方法。
+     * 关键步骤：
+     * 1. 查启用中的账号
+     * 2. 用 BCrypt 校验密码
+     * 3. 写入 Sa-Token 登录态和角色/公司上下文
+     */
     @Override
     public LoginResponse login(String username, String password) {
-        QueryWrapper<SysUser> wrapper = new QueryWrapper<>();
-        wrapper.eq("username", username)
-                .eq("is_active", true);
-        SysUser sysUser = sysUserMapper.selectOne(wrapper);
-        LoginResponse loginResponse = new LoginResponse();
-
-        // password 加密 BCrypt
-        //String hash_pw = BCrypt.hashpw(password);
-
-        if(BCrypt.checkpw(password,sysUser.getPasswordHash())){
-            // 登录密码验证成功
-            if(sysUser.getIsActive()){
-                // 账号正常使用
-                StpUtil.login(sysUser.getId());
-                String token = StpUtil.getTokenValue();
-                StpUtil.getSession().set("role",sysUser.getRole());
-                StpUtil.getSession().set("companyId", sysUser.getCompanyId());
-                loginResponse.setToken(token);
-            }else{
-                throw new RuntimeException("账号已停用");
-            }
-        }else {
-            throw new RuntimeException("账号或密码有误");
+        SysUser sysUser = sysUserService.getActiveByUsername(username);
+        if (sysUser == null || !sysUserService.passwordMatches(password, sysUser.getPasswordHash())) {
+            throw new IllegalArgumentException("账号或密码有误");
         }
+
+        // 登录成功后，把角色和 companyId 写进 session，后面的鉴权和数据隔离都靠它。
+        StpUtil.login(sysUser.getId());
+        StpUtil.getSession().set("role", RoleConstants.normalize(sysUser.getRole()));
+        StpUtil.getSession().set("companyId", sysUser.getCompanyId());
+
+        LoginResponse loginResponse = new LoginResponse();
         loginResponse.setUserId(sysUser.getId());
         loginResponse.setUsername(sysUser.getUsername());
         loginResponse.setName(sysUser.getName());
-        loginResponse.setRole(sysUser.getRole());
+        loginResponse.setRole(RoleConstants.normalize(sysUser.getRole()));
+        loginResponse.setToken(StpUtil.getTokenValue());
         return loginResponse;
     }
 }

@@ -6,119 +6,224 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * JSON 工具类（基于 Jackson）
- */
 @Slf4j
 @UtilityClass
 public class JsonUtils {
-    
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    
+
+    private static final List<String> NEW_CATEGORIES = List.of(
+            "labor", "direct", "deprec", "intangible", "design", "equip", "outsource", "other"
+    );
+
+    private static final Map<String, String> LEGACY_CATEGORY_MAPPING = Map.of(
+            "direct_material", "direct",
+            "direct_fuel", "direct",
+            "direct_rental", "direct",
+            "depreciation", "deprec",
+            "amortization", "intangible",
+            "commissioning", "equip",
+            "outsourced", "outsource"
+    );
+
     /**
-     * 解析月度成本数据JSON
+     * 统一解析月度费用 JSON。
+     * 这里兼容两套结构：
+     * 1. 旧后端结构
+     * 2. 新前端 8 类费用结构
      */
     public static CostData parseCostData(String json) {
         try {
-            Map<String, List<Map<String, Object>>> data = MAPPER.readValue(json, 
-                new TypeReference<Map<String, List<Map<String, Object>>>>(){});
-            return new CostData(data);
+            if (json == null || json.isBlank()) {
+                return new CostData(emptyData());
+            }
+            Map<String, Object> root = MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {});
+            return new CostData(normalize(root));
         } catch (JsonProcessingException e) {
-            log.error("解析JSON失败: {}", json, e);
-            throw new RuntimeException("JSON解析失败", e);
+            log.error("解析 JSON 失败: {}", json, e);
+            throw new RuntimeException("JSON 解析失败", e);
         }
     }
-    
+
     /**
-     * 将成本数据转换为JSON字符串（用于继承时的金额清零）
+     * 继承上月数据时，把金额字段清零，但保留条目结构。
      */
     public static String zeroOutAmounts(String json) {
         try {
-            Map<String, List<Map<String, Object>>> data = MAPPER.readValue(json, 
-                new TypeReference<Map<String, List<Map<String, Object>>>>(){});
-            
-            // 遍历8大类，将每个条目的amount设为0
-            String[] categories = {
-                "labor", "direct_material", "direct_fuel", "direct_rental",
-                "depreciation", "amortization", "design", "commissioning",
-                "outsourced", "other"
-            };
-            
-            for (String category : categories) {
-                List<Map<String, Object>> items = data.get(category);
-                if (items != null) {
-                    for (Map<String, Object> item : items) {
-                        // 将常见金额字段置零
-                        item.put("amount", 0.0);
-                        // 嵌套对象
-                        if (item.containsKey("salary")) {
-                            Map<String, Object> salary = (Map<String, Object>) item.get("salary");
-                            salary.put("amount", 0.0);
-                        }
-                        if (item.containsKey("social_security")) {
-                            Map<String, Object> ss = (Map<String, Object>) item.get("social_security");
-                            ss.put("amount", 0.0);
-                        }
-                        if (item.containsKey("housing_fund")) {
-                            Map<String, Object> hf = (Map<String, Object>) item.get("housing_fund");
-                            hf.put("amount", 0.0);
-                        }
-                        if (item.containsKey("depreciation")) {
-                            Map<String, Object> dep = (Map<String, Object>) item.get("depreciation");
-                            dep.put("amount", 0.0);
-                        }
-                    }
-                }
+            if (json == null || json.isBlank()) {
+                return MAPPER.writeValueAsString(emptyData());
             }
-            
-            return MAPPER.writeValueAsString(data);
+            Map<String, Object> root = MAPPER.readValue(json, new TypeReference<Map<String, Object>>() {});
+            Map<String, List<Map<String, Object>>> normalized = normalize(root);
+            normalized.values().forEach(items -> items.forEach(JsonUtils::zeroAmount));
+            return MAPPER.writeValueAsString(toFrontendShape(normalized));
         } catch (JsonProcessingException e) {
-            log.error("JSON处理失败: {}", json, e);
-            throw new RuntimeException("JSON处理失败", e);
+            log.error("JSON 处理失败: {}", json, e);
+            throw new RuntimeException("JSON 处理失败", e);
         }
     }
-    
-    /**
-     * 计算总计金额（从JSON中累加所有类别的amount总和）
-     */
+
     public static double calculateGrandTotal(String json) {
-        CostData data = parseCostData(json);
-        return data.calculateTotal();
+        return parseCostData(json).calculateTotal();
     }
-    
+
     /**
-     * 成本数据封装类
+     * 把任意兼容结构统一转成前端更容易消费的 fees 结构。
      */
+    public static Map<String, Object> toFrontendFees(String json) {
+        return toFrontendShape(parseCostData(json).getData());
+    }
+
     public static class CostData {
-        private Map<String, List<Map<String, Object>>> data;
-        
+        private final Map<String, List<Map<String, Object>>> data;
+
         public CostData(Map<String, List<Map<String, Object>>> data) {
             this.data = data;
         }
-        
+
         public Map<String, List<Map<String, Object>>> getData() {
             return data;
         }
-        
+
+        public List<Map<String, Object>> getItems(String category) {
+            return data.getOrDefault(category, List.of());
+        }
+
         public double calculateTotal() {
-            double total = 0.0;
-            for (Map.Entry<String, List<Map<String, Object>>> entry : data.entrySet()) {
-                for (Map<String, Object> item : entry.getValue()) {
-                    total += ((Number) item.getOrDefault("amount", 0)).doubleValue();
+            return data.values().stream()
+                    .flatMap(List::stream)
+                    .mapToDouble(JsonUtils::readAmount)
+                    .sum();
+        }
+
+        public double getCategoryTotal(String category) {
+            return getItems(category).stream()
+                    .mapToDouble(JsonUtils::readAmount)
+                    .sum();
+        }
+    }
+
+    /**
+     * 自动识别当前 JSON 属于“新前端结构”还是“旧后端结构”。
+     */
+    private static Map<String, List<Map<String, Object>>> normalize(Map<String, Object> root) {
+        if (root.isEmpty()) {
+            return emptyData();
+        }
+        Object firstValue = root.values().iterator().next();
+        if (firstValue instanceof Map<?, ?>) {
+            return normalizeFrontendShape(root);
+        }
+        return normalizeLegacyShape(root);
+    }
+
+    /**
+     * 把新前端 fees 结构归一化成统一内部结构，便于后端计算总金额。
+     */
+    private static Map<String, List<Map<String, Object>>> normalizeFrontendShape(Map<String, Object> root) {
+        Map<String, List<Map<String, Object>>> normalized = emptyData();
+        for (String category : NEW_CATEGORIES) {
+            Object categoryObj = root.get(category);
+            if (!(categoryObj instanceof Map<?, ?> categoryMap)) {
+                continue;
+            }
+            List<Map<String, Object>> merged = new ArrayList<>();
+            merged.addAll(copyItems(categoryMap.get("systemItems"), "system"));
+            merged.addAll(copyItems(categoryMap.get("manualItems"), "manual"));
+            normalized.put(category, merged);
+        }
+        return normalized;
+    }
+
+    /**
+     * 把旧后端结构归一化，并映射到新的 8 类费用编码。
+     */
+    private static Map<String, List<Map<String, Object>>> normalizeLegacyShape(Map<String, Object> root) {
+        Map<String, List<Map<String, Object>>> normalized = emptyData();
+        for (Map.Entry<String, Object> entry : root.entrySet()) {
+            String category = LEGACY_CATEGORY_MAPPING.getOrDefault(entry.getKey(), entry.getKey());
+            List<Map<String, Object>> items = copyItems(entry.getValue(), "legacy");
+            normalized.computeIfAbsent(category, key -> new ArrayList<>()).addAll(items);
+        }
+        return normalized;
+    }
+
+    private static List<Map<String, Object>> copyItems(Object rawItems, String sourceType) {
+        List<Map<String, Object>> copied = new ArrayList<>();
+        if (!(rawItems instanceof List<?> list)) {
+            return copied;
+        }
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> itemMap) {
+                Map<String, Object> copiedItem = new LinkedHashMap<>();
+                itemMap.forEach((key, value) -> copiedItem.put(String.valueOf(key), value));
+                copiedItem.putIfAbsent("sourceType", sourceType);
+                copied.add(copiedItem);
+            }
+        }
+        return copied;
+    }
+
+    private static Map<String, List<Map<String, Object>>> emptyData() {
+        Map<String, List<Map<String, Object>>> data = new LinkedHashMap<>();
+        NEW_CATEGORIES.forEach(category -> data.put(category, new ArrayList<>()));
+        return data;
+    }
+
+    /**
+     * 把统一内部结构再转回前端更好消费的 fees 形状。
+     */
+    private static Map<String, Object> toFrontendShape(Map<String, List<Map<String, Object>>> normalized) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String category : NEW_CATEGORIES) {
+            Map<String, Object> categoryValue = new LinkedHashMap<>();
+            List<Map<String, Object>> systemItems = new ArrayList<>();
+            List<Map<String, Object>> manualItems = new ArrayList<>();
+            for (Map<String, Object> item : normalized.getOrDefault(category, List.of())) {
+                String sourceType = String.valueOf(item.getOrDefault("sourceType", "manual"));
+                Map<String, Object> copiedItem = new LinkedHashMap<>(item);
+                copiedItem.remove("sourceType");
+                if ("system".equals(sourceType)) {
+                    systemItems.add(copiedItem);
+                } else {
+                    manualItems.add(copiedItem);
                 }
             }
-            return total;
+            categoryValue.put("systemItems", systemItems);
+            categoryValue.put("manualItems", manualItems);
+            result.put(category, categoryValue);
         }
-        
-        public double getCategoryTotal(String category) {
-            List<Map<String, Object>> items = data.get(category);
-            if (items == null) return 0.0;
-            return items.stream()
-                .mapToDouble(item -> ((Number) item.getOrDefault("amount", 0)).doubleValue())
-                .sum();
+        return result;
+    }
+
+    private static void zeroAmount(Map<String, Object> item) {
+        item.put("amount", 0.0);
+        if (item.containsKey("voucherIds")) {
+            item.put("voucherIds", new ArrayList<>());
         }
+        if (item.containsKey("vouchers")) {
+            item.put("vouchers", new ArrayList<>());
+        }
+        for (Map.Entry<String, Object> entry : new ArrayList<>(item.entrySet())) {
+            if (entry.getValue() instanceof Map<?, ?> nestedMap) {
+                Map<String, Object> copied = new LinkedHashMap<>();
+                nestedMap.forEach((key, value) -> copied.put(String.valueOf(key), value));
+                copied.put("amount", 0.0);
+                item.put(entry.getKey(), copied);
+            }
+        }
+    }
+
+    private static double readAmount(Map<String, Object> item) {
+        Object amount = item.get("amount");
+        if (amount instanceof Number number) {
+            return number.doubleValue();
+        }
+        return 0.0;
     }
 }

@@ -97,8 +97,7 @@ public class SettlementService {
     private void validateOutsourcedCost(ProjectMonthlyData data) {
         try {
             JsonUtils.CostData parsed = JsonUtils.parseCostData(data.getCostData());
-            List<Map<String, Object>> outsourcedItems = (List<Map<String, Object>>) 
-                parsed.getData().get("outsourced");
+            List<Map<String, Object>> outsourcedItems = parsed.getItems("outsource");
             
             if (outsourcedItems == null || outsourcedItems.isEmpty()) {
                 return;
@@ -122,7 +121,7 @@ public class SettlementService {
                 }
             }
         } catch (Exception e) {
-            log.warn("外包费用校验异常: {}", e.getMessage());
+            throw new IllegalArgumentException("外包费用校验失败: " + e.getMessage());
         }
     }
     

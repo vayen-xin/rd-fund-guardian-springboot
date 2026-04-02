@@ -1,161 +1,125 @@
 package com.vayen.rdcm.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vayen.rdcm.common.Result;
+import com.vayen.rdcm.dto.OptionItemResponse;
+import com.vayen.rdcm.dto.ProjectDetailResponse;
 import com.vayen.rdcm.entity.Project;
-import com.vayen.rdcm.mapper.ProjectMapper;
+import com.vayen.rdcm.security.CurrentUser;
+import com.vayen.rdcm.security.CurrentUserService;
+import com.vayen.rdcm.service.ProjectService;
 import lombok.AllArgsConstructor;
 import lombok.Data;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
 
-/**
- * 项目管理控制器（简化版）
- */
 @RestController
 @RequestMapping("/api/v1/projects")
 @AllArgsConstructor
 public class ProjectController {
 
+    private final ProjectService projectService;
+    private final CurrentUserService currentUserService;
 
-    private final ProjectMapper projectMapper;
-
-    
-    /**
-     * 获取当前用户companyId（辅助方法）
-     */
-    private Long getCurrentCompanyId() {
-        Long userId = StpUtil.getLoginIdAsLong();
-        Object companyIdObj = StpUtil.getSessionByLoginId(userId).get("companyId");
-        return companyIdObj != null ? Long.parseLong(companyIdObj.toString()) : null;
-    }
-    
     /**
      * 分页查询项目列表
      */
-    @GetMapping("/get")
+    @GetMapping({"", "/get"})
     public Result<Page<Project>> getProjects(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String name) {
-        
-        QueryWrapper<Project> wrapper = new QueryWrapper<>();
-        
-        // 多租户：自动注入 companyId
-        Long companyId = getCurrentCompanyId();
-        if (companyId != null) {
-            wrapper.eq("company_id", companyId);
-        }
-        
-        if (status != null && !status.isEmpty()) {
-            wrapper.eq("status", status);
-        }
-        if (name != null && !name.isEmpty()) {
-            wrapper.like("project_name", name);
-        }
-        
-        Page<Project> projectPage = new Page<>(page, size);
-        Page<Project> result = projectMapper.selectPage(projectPage, wrapper);
-        
-        return Result.success(result);
+
+        CurrentUser currentUser = currentUserService.getCurrentUser();
+        return Result.success(projectService.getProjects(currentUser, page, size, status, name));
     }
-    
+
     /**
      * 获取项目详情
      */
     @GetMapping("/{id}")
-    public Result<Project> getProject(@PathVariable Long id) {
-        Project project = projectMapper.selectById(id);
-        return Result.success(project);
+    public Result<ProjectDetailResponse> getProject(@PathVariable Long id) {
+        return Result.success(projectService.getProjectDetail(id, currentUserService.getCurrentUser()));
     }
-    
+
+    /**
+     * 获取项目可选员工下拉
+     */
+    @GetMapping("/employee-options")
+    public Result<List<OptionItemResponse>> getEmployeeOptions(@RequestParam(required = false) String keyword) {
+        return Result.success(projectService.getEmployeeOptions(currentUserService.getCurrentUser(), keyword));
+    }
+
+    /**
+     * 获取项目可选设备下拉
+     */
+    @GetMapping("/device-options")
+    public Result<List<OptionItemResponse>> getDeviceOptions(@RequestParam(required = false) String keyword) {
+        return Result.success(projectService.getDeviceOptions(currentUserService.getCurrentUser(), keyword));
+    }
+
     /**
      * 创建项目
      */
-    @PostMapping("/create")
+    @PostMapping({"", "/create"})
     public Result<Void> createProject(@RequestBody ProjectRequest request) {
-        Long currentUserId = StpUtil.getLoginIdAsLong();
-        Long companyId = getCurrentCompanyId();
-        
-        Project project = new Project();
-        project.setCompanyId(companyId);
-        project.setProjectName(request.getProjectName());
-        project.setCode(request.getCode());
-        project.setStatus("pending");
-        project.setStartDate(request.getStartDate());
-        project.setDescription(request.getDescription());
-        project.setManagerName(request.getManagerName());
-        project.setManagerPhone(request.getManagerPhone());
-        
-        projectMapper.insert(project);
+        Project project = buildProject(request);
+        projectService.createProject(project, request.getEmployeeIds(), request.getDeviceIds(), currentUserService.getCurrentUser());
         return Result.success();
     }
-    
+
     /**
      * 更新项目
      */
     @PutMapping("/{id}")
-    // 没有设置空值判断，不需要修改字段请不传，勿传空值
     public Result<Void> updateProject(@PathVariable Long id, @RequestBody ProjectRequest request) {
-        Project project = projectMapper.selectById(id);
-        if (project == null) {
-            return Result.error("项目不存在");
-        }
-        
-        project.setProjectName(request.getProjectName());
-        project.setCode(request.getCode());
-        project.setDescription(request.getDescription());
-        project.setManagerName(request.getManagerName());
-        project.setManagerPhone(request.getManagerPhone());
-        project.setStartDate(request.getStartDate());
-        
-        projectMapper.updateById(project);
+        projectService.updateProject(id, buildProject(request), request.getEmployeeIds(), request.getDeviceIds(), currentUserService.getCurrentUser());
         return Result.success();
     }
-    
+
     /**
      * 删除项目
      */
     @DeleteMapping("/{id}")
     public Result<Void> deleteProject(@PathVariable Long id) {
-        projectMapper.deleteById(id);
+        projectService.deleteProject(id, currentUserService.getCurrentUser());
         return Result.success();
     }
-    
+
     /**
      * 更新项目状态
      */
     @PutMapping("/{id}/status")
-    public Result<Void> updateStatus(
-            @PathVariable Long id,
-            @RequestParam String status) { // pending/ongoing/ended/settled
-        
-        Project project = projectMapper.selectById(id);
-        if (project == null) {
-            return Result.error("项目不存在");
-        }
-        
-        project.setStatus(status);
-        if ("ended".equals(status) && project.getEndDate() == null) {
-            project.setEndDate(LocalDate.now());
-        }
-        
-        projectMapper.updateById(project);
+    public Result<Void> updateStatus(@PathVariable Long id, @RequestParam String status) {
+        projectService.updateStatus(id, status, currentUserService.getCurrentUser());
         return Result.success();
+    }
+
+    /**
+     * 结束项目
+     */
+    @PutMapping("/{id}/end")
+    public Result<Void> endProject(@PathVariable Long id) {
+        projectService.updateStatus(id, "ended", currentUserService.getCurrentUser());
+        return Result.success();
+    }
+
+    private Project buildProject(ProjectRequest request) {
+        Project project = new Project();
+        project.setProjectName(request.getProjectName());
+        project.setCode(request.getCode());
+        project.setStartDate(request.getStartDate());
+        project.setDescription(request.getDescription());
+        project.setManagerName(request.getManagerName());
+        project.setManagerPhone(request.getManagerPhone());
+        return project;
     }
 }
 
-/**
- * 项目创建/更新请求体
- */
 @Data
 class ProjectRequest {
     private String projectName;
@@ -163,6 +127,8 @@ class ProjectRequest {
     @DateTimeFormat(pattern = "yyyy-MM-dd")
     private LocalDate startDate;
     private String description;
-    private String managerName ;
+    private String managerName;
     private String managerPhone;
+    private List<Long> employeeIds;
+    private List<Long> deviceIds;
 }

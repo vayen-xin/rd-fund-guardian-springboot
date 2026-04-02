@@ -1,10 +1,12 @@
 package com.vayen.rdcm.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.entity.ProjectEmployee;
+import com.vayen.rdcm.security.CurrentUser;
+import com.vayen.rdcm.security.CurrentUserService;
 import com.vayen.rdcm.service.ProjectEmployeeService;
+import com.vayen.rdcm.service.ProjectService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -18,47 +20,50 @@ import java.util.List;
 public class ProjectEmployeeController {
 
     private final ProjectEmployeeService employeeService;
+    private final ProjectService projectService;
+    private final CurrentUserService currentUserService;
 
-    public ProjectEmployeeController(ProjectEmployeeService employeeService) {
+    public ProjectEmployeeController(ProjectEmployeeService employeeService,
+                                     ProjectService projectService,
+                                     CurrentUserService currentUserService) {
         this.employeeService = employeeService;
+        this.projectService = projectService;
+        this.currentUserService = currentUserService;
     }
-    
+
     /**
      * 获取项目下所有员工
      */
     @GetMapping
     @SaCheckPermission("project:view")
     public Result<List<ProjectEmployee>> getEmployees(@PathVariable Long projectId) {
-        List<ProjectEmployee> list = employeeService.getByProjectId(projectId);
-        return Result.success(list);
+        projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
+        return Result.success(employeeService.getByProjectId(projectId));
     }
-    
+
     /**
-     * 添加员工到项目
+     * 添加项目员工关联
      */
     @PostMapping
     @SaCheckPermission("project:edit")
-    public Result<Void> addEmployee(
-            @PathVariable Long projectId,
-            @RequestBody ProjectEmployee employee) {
-        
-        Long currentUserId = StpUtil.getLoginIdAsLong();
+    public Result<Void> addEmployee(@PathVariable Long projectId, @RequestBody ProjectEmployee employee) {
+        CurrentUser currentUser = currentUserService.getCurrentUser();
+        projectService.assertProjectAccess(projectId, currentUser);
         employee.setProjectId(projectId);
+        employee.setCompanyId(currentUser.getCompanyId());
         employee.setCreatedAt(LocalDateTime.now());
+        employee.setUpdatedAt(LocalDateTime.now());
         employeeService.save(employee);
-        
         return Result.success();
     }
-    
+
     /**
-     * 删除项目员工
+     * 删除项目员工关联
      */
     @DeleteMapping("/{id}")
     @SaCheckPermission("project:edit")
-    public Result<Void> removeEmployee(
-            @PathVariable Long projectId,
-            @PathVariable Long id) {
-        
+    public Result<Void> removeEmployee(@PathVariable Long projectId, @PathVariable Long id) {
+        projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
         employeeService.removeById(id);
         return Result.success();
     }

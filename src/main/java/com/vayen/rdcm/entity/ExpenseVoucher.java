@@ -5,11 +5,9 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
-/**
- * 费用凭证实体
- */
 @Data
 @TableName("expense_voucher")
 public class ExpenseVoucher {
@@ -17,21 +15,36 @@ public class ExpenseVoucher {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    @TableField("company_id")
+    private Long companyId;
+
     @TableField("project_id")
     private Long projectId;
 
-    @TableField("type")
-    private String type;
+    @TableField("year_month")
+    private String yearMonth;
 
-    @TableField("amount")
-    private Double amount;
+    @TableField("category")
+    private String category;
 
-    @TableField("description")
-    private String description;
+    @TableField("original_file_name")
+    private String originalFileName;
 
-    @TableField("file_path")
-    private String filePath;
+    @TableField("stored_file_name")
+    private String storedFileName;
 
-    @TableField("create_time")
-    private LocalDateTime createTime;
+    @TableField("relative_path")
+    private String relativePath;
+
+    @TableField("content_type")
+    private String contentType;
+
+    @TableField("file_size")
+    private Long fileSize;
+
+    @TableField("uploaded_by")
+    private Long uploadedBy;
+
+    @TableField("created_at")
+    private LocalDateTime createdAt;
 }

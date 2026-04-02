@@ -1,85 +1,81 @@
 package com.vayen.rdcm.controller;
 
-import cn.dev33.satoken.annotation.SaCheckPermission;
-import cn.dev33.satoken.stp.StpUtil;
 import com.vayen.rdcm.common.Result;
+import com.vayen.rdcm.dto.OptionItemResponse;
 import com.vayen.rdcm.entity.Employee;
+import com.vayen.rdcm.security.CurrentUser;
+import com.vayen.rdcm.security.CurrentUserService;
 import com.vayen.rdcm.service.EmployeeService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-/**
- * 员工管理控制器
- */
 @RestController
 @RequestMapping("/api/v1/employees")
 public class EmployeeController {
 
     private final EmployeeService employeeService;
+    private final CurrentUserService currentUserService;
 
-    public EmployeeController(EmployeeService employeeService) {
+    public EmployeeController(EmployeeService employeeService, CurrentUserService currentUserService) {
         this.employeeService = employeeService;
+        this.currentUserService = currentUserService;
     }
 
-    // 获取companyId辅助方法
-    private Long getCompanyId() {
-        Long userId = StpUtil.getLoginIdAsLong();
-        Object companyIdObj = StpUtil.getSessionByLoginId(userId).get("companyId");
-        return companyIdObj != null ? Long.parseLong(companyIdObj.toString()) : null;
-    }
-    
     /**
-     * 获取所有员工列表（可按公司筛选）
+     * 获取员工列表
      */
-    @GetMapping("/getEmployee")
+    @GetMapping({"", "/getEmployee"})
     public Result<List<Employee>> getEmployees() {
-        Long companyId = getCompanyId();
-        List<Employee> list;
-        if (companyId != null) {
-            list = employeeService.getEmployeesByCompanyId(companyId);
-        } else {
-            list = employeeService.list();
-        }
+        CurrentUser currentUser = currentUserService.getCurrentUser();
+        List<Employee> list = currentUser.isAdmin()
+                ? employeeService.list()
+                : employeeService.getEmployeesByCompanyId(currentUser.getCompanyId());
         return Result.success(list);
     }
-    
+
     /**
      * 获取员工详情
      */
     @GetMapping("/{id}")
     public Result<Employee> getEmployee(@PathVariable Long id) {
-        Long companyId = getCompanyId();
-        Employee employee = employeeService.getEmployeeById(id , companyId);
-        //Employee employee = employeeService.getById(id);
-        return Result.success(employee);
+        CurrentUser currentUser = currentUserService.getCurrentUser();
+        Long companyId = currentUser.isAdmin() ? null : currentUser.getCompanyId();
+        return Result.success(employeeService.getEmployeeById(id, companyId));
     }
-    
+
+    /**
+     * 获取员工下拉选项
+     */
+    @GetMapping("/options")
+    public Result<List<OptionItemResponse>> getEmployeeOptions(@RequestParam(required = false) String keyword) {
+        return Result.success(employeeService.getEmployeeOptions(currentUserService.getCurrentUser(), keyword));
+    }
+
     /**
      * 创建员工
      */
-    @PostMapping("/createEmployee")
+    @PostMapping({"", "/createEmployee"})
     public Result<Void> createEmployee(@RequestBody Employee employee) {
-        employeeService.save(employee);
+        employeeService.createEmployee(employee, currentUserService.getCurrentUser());
         return Result.success();
     }
-    
+
     /**
      * 更新员工
      */
     @PutMapping("/{id}")
     public Result<Void> updateEmployee(@PathVariable Long id, @RequestBody Employee employee) {
-        employee.setId(id);
-        employeeService.updateById(employee);
+        employeeService.updateEmployee(id, employee, currentUserService.getCurrentUser());
         return Result.success();
     }
-    
+
     /**
      * 删除员工
      */
     @DeleteMapping("/{id}")
     public Result<Void> deleteEmployee(@PathVariable Long id) {
-        employeeService.removeById(id);
+        employeeService.deleteEmployee(id, currentUserService.getCurrentUser());
         return Result.success();
     }
 }

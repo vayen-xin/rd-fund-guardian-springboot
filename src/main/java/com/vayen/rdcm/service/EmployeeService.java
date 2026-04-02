@@ -1,7 +1,9 @@
 package com.vayen.rdcm.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.vayen.rdcm.dto.OptionItemResponse;
 import com.vayen.rdcm.entity.Employee;
+import com.vayen.rdcm.security.CurrentUser;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -23,4 +25,12 @@ public interface EmployeeService extends IService<Employee> {
     Employee getByEmployeeId(String employeeId);
 
     Employee getEmployeeById(Long id , Long companyId);
+
+    void createEmployee(Employee employee, CurrentUser currentUser);
+
+    void updateEmployee(Long id, Employee employee, CurrentUser currentUser);
+
+    void deleteEmployee(Long id, CurrentUser currentUser);
+
+    List<OptionItemResponse> getEmployeeOptions(CurrentUser currentUser, String keyword);
 }

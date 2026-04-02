@@ -2,14 +2,16 @@ package com.vayen.rdcm.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaCheckRole;
-import cn.dev33.satoken.stp.StpUtil;
 import com.vayen.rdcm.common.Result;
+import com.vayen.rdcm.dto.MonthlyDataDetailResponse;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
+import com.vayen.rdcm.security.CurrentUserService;
 import com.vayen.rdcm.service.ProjectMonthlyDataService;
-import org.springframework.format.annotation.DateTimeFormat;
+import com.vayen.rdcm.service.ProjectService;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.List;
 
 /**
@@ -20,24 +22,29 @@ import java.util.List;
 public class ProjectMonthlyDataController {
 
     private final ProjectMonthlyDataService monthlyDataService;
+    private final ProjectService projectService;
+    private final CurrentUserService currentUserService;
 
-    public ProjectMonthlyDataController(ProjectMonthlyDataService monthlyDataService) {
+    public ProjectMonthlyDataController(ProjectMonthlyDataService monthlyDataService,
+                                        ProjectService projectService,
+                                        CurrentUserService currentUserService) {
         this.monthlyDataService = monthlyDataService;
+        this.projectService = projectService;
+        this.currentUserService = currentUserService;
     }
-    
+
     /**
      * 获取项目某月数据
      */
     @GetMapping("/{projectId}/monthly/{month}")
     @SaCheckPermission("project:view")
-    public Result<ProjectMonthlyData> getMonthlyData(
+    public Result<MonthlyDataDetailResponse> getMonthlyData(
             @PathVariable Long projectId,
-            @PathVariable @DateTimeFormat(pattern = "yyyy-MM") LocalDate month) {
-        
-        ProjectMonthlyData data = monthlyDataService.getProjectMonthlyData(projectId, month);
-        return Result.success(data);
+            @PathVariable String month) {
+        LocalDate workMonth = parseMonth(month);
+        return Result.success(projectService.getMonthlyDetail(projectId, workMonth, currentUserService.getCurrentUser()));
     }
-    
+
     /**
      * 创建或更新月度数据
      */
@@ -45,74 +52,84 @@ public class ProjectMonthlyDataController {
     @SaCheckPermission("project:edit")
     public Result<Void> saveMonthlyData(
             @PathVariable Long projectId,
-            @PathVariable @DateTimeFormat(pattern = "yyyy-MM") LocalDate month,
+            @PathVariable String month,
             @RequestBody MonthlyDataSaveRequest request) {
-        
-        Long currentUserId = StpUtil.getLoginIdAsLong();
+        LocalDate workMonth = parseMonth(month);
+        projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
         monthlyDataService.saveMonthlyData(
-            projectId, 
-            month, 
-            request.getCostData(), 
-            request.getGrandTotal(),
-            currentUserId
+                projectId,
+                workMonth,
+                request.getCostData(),
+                request.getGrandTotal(),
+                currentUserService.getCurrentUserId()
         );
         return Result.success();
     }
-    
+
     /**
      * 获取项目所有月度数据列表
      */
     @GetMapping("/{projectId}/monthly")
     @SaCheckPermission("project:view")
     public Result<List<ProjectMonthlyData>> getProjectMonthlyList(@PathVariable Long projectId) {
+        projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
         List<ProjectMonthlyData> list = monthlyDataService.getProjectMonthlyList(projectId);
         return Result.success(list);
     }
-    
+
     /**
-     * 手动触发月度数据继承（管理员功能）
+     * 提交月度数据
+     */
+    @PostMapping("/{projectId}/monthly/{month}/submit")
+    @SaCheckPermission("project:edit")
+    public Result<Void> submitMonthlyData(
+            @PathVariable Long projectId,
+            @PathVariable String month) {
+        LocalDate workMonth = parseMonth(month);
+        projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
+        monthlyDataService.submitMonthlyData(projectId, workMonth, currentUserService.getCurrentUserId());
+        return Result.success();
+    }
+
+    /**
+     * 手动触发月度数据继承
      */
     @PostMapping("/{projectId}/monthly/inherit")
-    @SaCheckRole("admin") // 仅管理员可手动触发
+    @SaCheckRole("admin")
     public Result<Void> triggerInherit(
             @PathVariable Long projectId,
             @RequestBody InheritRequest request) {
-        
-        Long currentUserId = StpUtil.getLoginIdAsLong();
+        projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
         monthlyDataService.inheritFromLastMonth(
-            projectId,
-            request.getFromMonth(),
-            request.getToMonth(),
-            currentUserId
+                projectId,
+                parseMonth(request.getFromMonth()),
+                parseMonth(request.getToMonth()),
+                currentUserService.getCurrentUserId()
         );
         return Result.success();
     }
+
+    private LocalDate parseMonth(String month) {
+        return YearMonth.parse(month).atDay(1);
+    }
 }
 
-/**
- * 保存月度数据请求体
- */
 class MonthlyDataSaveRequest {
     private String costData;
     private Double grandTotal;
-    
-    // getters & setters
+
     public String getCostData() { return costData; }
     public void setCostData(String costData) { this.costData = costData; }
     public Double getGrandTotal() { return grandTotal; }
     public void setGrandTotal(Double grandTotal) { this.grandTotal = grandTotal; }
 }
 
-/**
- * 继承请求体
- */
 class InheritRequest {
-    private LocalDate fromMonth;
-    private LocalDate toMonth;
-    
-    // getters & setters
-    public LocalDate getFromMonth() { return fromMonth; }
-    public void setFromMonth(LocalDate fromMonth) { this.fromMonth = fromMonth; }
-    public LocalDate getToMonth() { return toMonth; }
-    public void setToMonth(LocalDate toMonth) { this.toMonth = toMonth; }
+    private String fromMonth;
+    private String toMonth;
+
+    public String getFromMonth() { return fromMonth; }
+    public void setFromMonth(String fromMonth) { this.fromMonth = fromMonth; }
+    public String getToMonth() { return toMonth; }
+    public void setToMonth(String toMonth) { this.toMonth = toMonth; }
 }

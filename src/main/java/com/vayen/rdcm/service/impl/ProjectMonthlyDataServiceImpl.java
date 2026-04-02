@@ -1,104 +1,136 @@
 package com.vayen.rdcm.service.impl;
 
-import cn.hutool.core.collection.CollectionUtil;
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.vayen.rdcm.entity.Project;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
 import com.vayen.rdcm.mapper.ProjectMonthlyDataMapper;
 import com.vayen.rdcm.service.ProjectMonthlyDataService;
+import com.vayen.rdcm.service.ProjectService;
 import com.vayen.rdcm.util.JsonUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.YearMonth;
 import java.util.List;
 
-/**
- * 项目月度费用数据服务实现
- */
 @Service
-public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDataMapper, ProjectMonthlyData> 
-    implements ProjectMonthlyDataService {
-    
+@RequiredArgsConstructor
+public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDataMapper, ProjectMonthlyData>
+        implements ProjectMonthlyDataService {
+
+    private final ProjectService projectService;
+
     /**
-     * 将 LocalDate (yyyy-MM-01) 转换为 LocalDateTime (yyyy-MM-01 00:00:00)
+     * 把 yyyy-MM 月份转换成数据库里统一使用的 yyyy-MM-01 00:00:00。
      */
     private LocalDateTime toStartOfMonth(LocalDate month) {
         return month.atTime(0, 0, 0);
     }
-    
+
     @Override
     public ProjectMonthlyData getProjectMonthlyData(Long projectId, LocalDate workMonth) {
         LocalDateTime monthStart = toStartOfMonth(workMonth);
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
-               .eq("work_month", monthStart);
+                .eq("work_month", monthStart);
         return this.getOne(wrapper);
     }
-    
+
+    /**
+     * 保存月度草稿。
+     * 关键逻辑：
+     * 1. 校验前端传来的 grandTotal 是否和 JSON 计算值一致
+     * 2. 把新 8 类费用结构同步写入旧表里的冗余总额字段
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void saveMonthlyData(Long projectId, LocalDate workMonth, String costData, 
+    public void saveMonthlyData(Long projectId, LocalDate workMonth, String costData,
                                 Double grandTotal, Long createdBy) {
         LocalDateTime monthStart = toStartOfMonth(workMonth);
-        
+
         ProjectMonthlyData monthlyData = getProjectMonthlyData(projectId, workMonth);
         if (monthlyData == null) {
+            Project project = projectService.getProjectRecord(projectId);
             monthlyData = new ProjectMonthlyData();
+            monthlyData.setCompanyId(project.getCompanyId());
             monthlyData.setProjectId(projectId);
             monthlyData.setWorkMonth(monthStart);
             monthlyData.setCreatedBy(createdBy);
+            monthlyData.setCreatedAt(LocalDateTime.now());
         }
-        
-        // 验证：JSON中的总和与传入的grandTotal一致
+
+        // 防止前端总金额和明细 JSON 对不上，先做一致性校验。
         double calculatedTotal = JsonUtils.calculateGrandTotal(costData);
         double diff = Math.abs(calculatedTotal - grandTotal);
         if (diff > 0.01) {
             throw new RuntimeException(String.format(
-                "JSON计算总和(%.2f)与传入总金额(%.2f)不一致", calculatedTotal, grandTotal));
+                    "JSON 计算总和(%.2f)与传入总金额(%.2f)不一致", calculatedTotal, grandTotal));
         }
-        
+
         monthlyData.setCostData(costData);
         monthlyData.setGrandTotal(grandTotal);
         monthlyData.setUpdatedAt(LocalDateTime.now());
-        
-        // 计算并保存各冗余字段
+
+        // 兼容旧表结构：虽然前端已经是 8 类费用，但数据库里还有历史冗余字段。
         JsonUtils.CostData parsed = JsonUtils.parseCostData(costData);
         monthlyData.setLaborTotal(parsed.getCategoryTotal("labor"));
-        monthlyData.setDirectMaterialTotal(parsed.getCategoryTotal("direct_material"));
-        monthlyData.setDirectFuelTotal(parsed.getCategoryTotal("direct_fuel"));
-        monthlyData.setDirectRentalTotal(parsed.getCategoryTotal("direct_rental"));
-        monthlyData.setDepreciationTotal(parsed.getCategoryTotal("depreciation"));
-        monthlyData.setAmortizationTotal(parsed.getCategoryTotal("amortization"));
+        monthlyData.setDirectMaterialTotal(parsed.getCategoryTotal("direct"));
+        monthlyData.setDirectFuelTotal(0.0);
+        monthlyData.setDirectRentalTotal(0.0);
+        monthlyData.setDepreciationTotal(parsed.getCategoryTotal("deprec"));
+        monthlyData.setAmortizationTotal(parsed.getCategoryTotal("intangible"));
         monthlyData.setDesignTotal(parsed.getCategoryTotal("design"));
-        monthlyData.setCommissioningTotal(parsed.getCategoryTotal("commissioning"));
-        monthlyData.setOutsourcedTotal(parsed.getCategoryTotal("outsourced"));
+        monthlyData.setCommissioningTotal(parsed.getCategoryTotal("equip"));
+        monthlyData.setOutsourcedTotal(parsed.getCategoryTotal("outsource"));
         monthlyData.setOtherTotal(parsed.getCategoryTotal("other"));
-        monthlyData.setStatus("finalized");
-        
+        monthlyData.setStatus("draft");
+        monthlyData.setVersion(monthlyData.getVersion() == null ? 1 : monthlyData.getVersion() + 1);
+
         this.saveOrUpdate(monthlyData);
     }
-    
+
+    /**
+     * 把草稿提交成待结算状态。
+     * 当前先沿用旧表里的 finalized，后面如果要统一成 pending_settlement 再整体收口。
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void inheritFromLastMonth(Long projectId, LocalDate fromMonth, LocalDate toMonth, 
-                                      Long operatorId) {
+    public void submitMonthlyData(Long projectId, LocalDate workMonth, Long operatorId) {
+        ProjectMonthlyData monthlyData = getProjectMonthlyData(projectId, workMonth);
+        if (monthlyData == null) {
+            throw new IllegalArgumentException("当前月份没有草稿数据，无法提交");
+        }
+        if ("settled".equals(monthlyData.getStatus())) {
+            throw new IllegalArgumentException("已结算的数据不能重复提交");
+        }
+        monthlyData.setStatus("finalized");
+        monthlyData.setUpdatedAt(LocalDateTime.now());
+        this.updateById(monthlyData);
+    }
+
+    /**
+     * 继承上月结构到新月份。
+     * 当前策略是保留条目结构，但把金额全部清零。
+     */
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void inheritFromLastMonth(Long projectId, LocalDate fromMonth, LocalDate toMonth,
+                                     Long operatorId) {
         LocalDateTime fromMonthStart = toStartOfMonth(fromMonth);
         LocalDateTime toMonthStart = toStartOfMonth(toMonth);
-        
-        // 1. 查询上个月数据
+
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
-               .eq("work_month", fromMonthStart);
+                .eq("work_month", fromMonthStart);
         ProjectMonthlyData lastMonthData = this.getOne(wrapper);
-        
+
         if (lastMonthData == null) {
-            // 上个月无数据，创建空记录
+            Project project = projectService.getProjectRecord(projectId);
             ProjectMonthlyData newData = new ProjectMonthlyData();
+            newData.setCompanyId(project.getCompanyId());
             newData.setProjectId(projectId);
             newData.setWorkMonth(toMonthStart);
             newData.setCostData("{}");
@@ -120,12 +152,13 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
             this.save(newData);
             return;
         }
-        
-        // 2. 复制JSON，金额清零
+
+        // 继承时只保留结构，不把上月金额直接带到本月。
         String oldCostData = lastMonthData.getCostData();
         String newCostData = JsonUtils.zeroOutAmounts(oldCostData);
-        
+
         ProjectMonthlyData newData = new ProjectMonthlyData();
+        newData.setCompanyId(lastMonthData.getCompanyId());
         newData.setProjectId(projectId);
         newData.setWorkMonth(toMonthStart);
         newData.setCostData(newCostData);
@@ -144,15 +177,15 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         newData.setCreatedBy(operatorId);
         newData.setCreatedAt(LocalDateTime.now());
         newData.setUpdatedAt(LocalDateTime.now());
-        
+
         this.save(newData);
     }
-    
+
     @Override
     public List<ProjectMonthlyData> getProjectMonthlyList(Long projectId) {
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
-               .orderByDesc("work_month");
+                .orderByDesc("work_month");
         return this.list(wrapper);
     }
 }
