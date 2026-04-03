@@ -1,0 +1,15 @@
+{
+  "projectName": "研发费用合规管理系统二期",
+  "code": "RDCM-2026-001",
+  "startDate": "2026-04-01",
+  "description": "用于接口联调和流程验证",
+  "managerName": "王经理",
+  "managerPhone": "13800000000",
+  "employeeIds": [
+    1,
+    2
+  ],
+  "deviceIds": [
+    1
+  ]
+}

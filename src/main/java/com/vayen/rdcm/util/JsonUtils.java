@@ -17,10 +17,6 @@ public class JsonUtils {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    private static final List<String> NEW_CATEGORIES = List.of(
-            "labor", "direct", "deprec", "intangible", "design", "equip", "outsource", "other"
-    );
-
     private static final Map<String, String> LEGACY_CATEGORY_MAPPING = Map.of(
             "direct_material", "direct",
             "direct_fuel", "direct",
@@ -127,14 +123,14 @@ public class JsonUtils {
      */
     private static Map<String, List<Map<String, Object>>> normalizeFrontendShape(Map<String, Object> root) {
         Map<String, List<Map<String, Object>>> normalized = emptyData();
-        for (String category : NEW_CATEGORIES) {
+        for (String category : MonthlyFeeCatalog.categoryCodes()) {
             Object categoryObj = root.get(category);
             if (!(categoryObj instanceof Map<?, ?> categoryMap)) {
                 continue;
             }
             List<Map<String, Object>> merged = new ArrayList<>();
-            merged.addAll(copyItems(categoryMap.get("systemItems"), "system"));
-            merged.addAll(copyItems(categoryMap.get("manualItems"), "manual"));
+            merged.addAll(copyItems(category, categoryMap.get("systemItems"), "system"));
+            merged.addAll(copyItems(category, categoryMap.get("manualItems"), "manual"));
             normalized.put(category, merged);
         }
         return normalized;
@@ -147,13 +143,13 @@ public class JsonUtils {
         Map<String, List<Map<String, Object>>> normalized = emptyData();
         for (Map.Entry<String, Object> entry : root.entrySet()) {
             String category = LEGACY_CATEGORY_MAPPING.getOrDefault(entry.getKey(), entry.getKey());
-            List<Map<String, Object>> items = copyItems(entry.getValue(), "legacy");
+            List<Map<String, Object>> items = copyItems(category, entry.getValue(), "legacy");
             normalized.computeIfAbsent(category, key -> new ArrayList<>()).addAll(items);
         }
         return normalized;
     }
 
-    private static List<Map<String, Object>> copyItems(Object rawItems, String sourceType) {
+    private static List<Map<String, Object>> copyItems(String categoryCode, Object rawItems, String sourceType) {
         List<Map<String, Object>> copied = new ArrayList<>();
         if (!(rawItems instanceof List<?> list)) {
             return copied;
@@ -163,6 +159,15 @@ public class JsonUtils {
                 Map<String, Object> copiedItem = new LinkedHashMap<>();
                 itemMap.forEach((key, value) -> copiedItem.put(String.valueOf(key), value));
                 copiedItem.putIfAbsent("sourceType", sourceType);
+                copiedItem.putIfAbsent("categoryCode", categoryCode);
+                copiedItem.putIfAbsent("categoryLabel", MonthlyFeeCatalog.categoryLabel(categoryCode));
+                Object itemCode = copiedItem.get("itemCode");
+                if (itemCode instanceof String code && !code.isBlank()) {
+                    copiedItem.putIfAbsent("itemLabel", MonthlyFeeCatalog.itemLabel(categoryCode, code));
+                }
+                if (!copiedItem.containsKey("label") && copiedItem.get("itemLabel") instanceof String itemLabel) {
+                    copiedItem.put("label", itemLabel);
+                }
                 copied.add(copiedItem);
             }
         }
@@ -170,9 +175,7 @@ public class JsonUtils {
     }
 
     private static Map<String, List<Map<String, Object>>> emptyData() {
-        Map<String, List<Map<String, Object>>> data = new LinkedHashMap<>();
-        NEW_CATEGORIES.forEach(category -> data.put(category, new ArrayList<>()));
-        return data;
+        return MonthlyFeeCatalog.emptyData();
     }
 
     /**
@@ -180,7 +183,7 @@ public class JsonUtils {
      */
     private static Map<String, Object> toFrontendShape(Map<String, List<Map<String, Object>>> normalized) {
         Map<String, Object> result = new LinkedHashMap<>();
-        for (String category : NEW_CATEGORIES) {
+        for (String category : MonthlyFeeCatalog.categoryCodes()) {
             Map<String, Object> categoryValue = new LinkedHashMap<>();
             List<Map<String, Object>> systemItems = new ArrayList<>();
             List<Map<String, Object>> manualItems = new ArrayList<>();

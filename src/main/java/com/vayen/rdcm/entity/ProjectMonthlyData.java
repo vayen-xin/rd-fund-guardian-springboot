@@ -5,10 +5,11 @@ import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 /**
- * 项目月度费用数据实体（JSON存储）
+ * 项目月度费用数据实体，按项目和月份存储费用及月度员工快照。
  */
 @Data
 @TableName("project_monthly_data")
@@ -24,32 +25,44 @@ public class ProjectMonthlyData {
     private Long projectId;
 
     @TableField("work_month")
-    private LocalDateTime workMonth; // 格式：YYYY-MM-01 00:00:00
+    private LocalDateTime workMonth;
 
     @TableField("cost_data")
-    private String costData; // JSON格式
+    private String costData;
 
-    // 冗余字段
+    @TableField("employee_data")
+    private String employeeData;
+
     @TableField("labor_total")
     private Double laborTotal;
+
     @TableField("direct_material_total")
     private Double directMaterialTotal;
+
     @TableField("direct_fuel_total")
     private Double directFuelTotal;
+
     @TableField("direct_rental_total")
     private Double directRentalTotal;
+
     @TableField("depreciation_total")
     private Double depreciationTotal;
+
     @TableField("amortization_total")
     private Double amortizationTotal;
+
     @TableField("design_total")
     private Double designTotal;
+
     @TableField("commissioning_total")
     private Double commissioningTotal;
+
     @TableField("outsourced_total")
     private Double outsourcedTotal;
+
     @TableField("other_total")
     private Double otherTotal;
+
     @TableField("grand_total")
     private Double grandTotal;
 

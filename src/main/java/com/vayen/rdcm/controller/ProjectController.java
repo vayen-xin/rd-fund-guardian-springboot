@@ -27,7 +27,7 @@ public class ProjectController {
     /**
      * 分页查询项目列表
      */
-    @GetMapping({"", "/get"})
+    @GetMapping
     public Result<Page<Project>> getProjects(
             @RequestParam(defaultValue = "1") Integer page,
             @RequestParam(defaultValue = "10") Integer size,
@@ -65,7 +65,7 @@ public class ProjectController {
     /**
      * 创建项目
      */
-    @PostMapping({"", "/create"})
+    @PostMapping
     public Result<Void> createProject(@RequestBody ProjectRequest request) {
         Project project = buildProject(request);
         projectService.createProject(project, request.getEmployeeIds(), request.getDeviceIds(), currentUserService.getCurrentUser());

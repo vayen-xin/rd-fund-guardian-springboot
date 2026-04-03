@@ -1,12 +1,9 @@
 package com.vayen.rdcm.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.vayen.rdcm.entity.Employee;
+import com.vayen.rdcm.entity.AttendanceRecord;
 import org.apache.ibatis.annotations.Mapper;
 
-/**
- * 员工 Mapper 接口。
- */
 @Mapper
-public interface EmployeeMapper extends BaseMapper<Employee> {
+public interface AttendanceRecordMapper extends BaseMapper<AttendanceRecord> {
 }

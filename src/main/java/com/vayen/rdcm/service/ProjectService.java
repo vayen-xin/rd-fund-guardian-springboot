@@ -2,6 +2,8 @@ package com.vayen.rdcm.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vayen.rdcm.dto.MonthlyDataDetailResponse;
 import com.vayen.rdcm.dto.OptionItemResponse;
 import com.vayen.rdcm.dto.ProjectDetailResponse;
@@ -15,12 +17,14 @@ import com.vayen.rdcm.entity.ProjectSettlement;
 import com.vayen.rdcm.mapper.DeviceMapper;
 import com.vayen.rdcm.mapper.EmployeeMapper;
 import com.vayen.rdcm.mapper.ProjectMapper;
+import com.vayen.rdcm.mapper.ProjectMonthlyDataMapper;
 import com.vayen.rdcm.mapper.ProjectOperationLogMapper;
 import com.vayen.rdcm.mapper.ProjectSettlementMapper;
 import com.vayen.rdcm.security.CurrentUser;
 import com.vayen.rdcm.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -36,6 +40,7 @@ import java.util.stream.Collectors;
 public class ProjectService {
 
     private static final DateTimeFormatter YEAR_MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final ProjectMapper projectMapper;
     private final ProjectEmployeeService projectEmployeeService;
@@ -44,7 +49,7 @@ public class ProjectService {
     private final EmployeeMapper employeeMapper;
     private final ProjectOperationLogMapper projectOperationLogMapper;
     private final ProjectSettlementMapper projectSettlementMapper;
-    private final ProjectMonthlyDataService projectMonthlyDataService;
+    private final ProjectMonthlyDataMapper projectMonthlyDataMapper;
 
     /**
      * 项目列表查询。
@@ -111,7 +116,7 @@ public class ProjectService {
      */
     public MonthlyDataDetailResponse getMonthlyDetail(Long projectId, LocalDate workMonth, CurrentUser currentUser) {
         getProjectById(projectId, currentUser);
-        ProjectMonthlyData monthlyData = projectMonthlyDataService.getProjectMonthlyData(projectId, workMonth);
+        ProjectMonthlyData monthlyData = getProjectMonthlyDataRecord(projectId, workMonth);
         if (monthlyData == null) {
             throw new IllegalArgumentException("当前月份没有月度数据");
         }
@@ -128,7 +133,9 @@ public class ProjectService {
         response.setSettledAt("settled".equals(monthlyData.getStatus()) && monthlyData.getUpdatedAt() != null
                 ? monthlyData.getUpdatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
                 : null);
-        response.setEmployees(employees.stream().map(this::toMonthlyEmployeeItem).toList());
+        List<MonthlyDataDetailResponse.EmployeeItem> availableEmployees = employees.stream().map(this::toMonthlyEmployeeItem).toList();
+        response.setAvailableEmployees(availableEmployees);
+        response.setEmployees(resolveMonthlyEmployees(monthlyData, availableEmployees));
         response.setDevices(projectEquipments.stream().map(item -> toMonthlyDeviceItem(item, deviceMap.get(item.getDeviceId()))).toList());
         response.setFees(JsonUtils.toFrontendFees(monthlyData.getCostData()));
         return response;
@@ -184,6 +191,7 @@ public class ProjectService {
      * 创建项目并同步保存员工/设备关联。
      */
     public Project createProject(Project project, List<Long> employeeIds, List<Long> deviceIds, CurrentUser currentUser) {
+        validateProjectInput(project);
         project.setId(null);
         if (!currentUser.isAdmin()) {
             project.setCompanyId(currentUser.getCompanyId());
@@ -203,6 +211,7 @@ public class ProjectService {
      * 更新项目基础信息并重建员工/设备关联。
      */
     public void updateProject(Long projectId, Project updateRequest, List<Long> employeeIds, List<Long> deviceIds, CurrentUser currentUser) {
+        validateProjectInput(updateRequest);
         Project existing = getProjectById(projectId, currentUser);
         existing.setProjectName(updateRequest.getProjectName());
         existing.setCode(updateRequest.getCode());
@@ -287,6 +296,13 @@ public class ProjectService {
         return projectSettlementMapper.selectOne(wrapper);
     }
 
+    private ProjectMonthlyData getProjectMonthlyDataRecord(Long projectId, LocalDate workMonth) {
+        QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
+        wrapper.eq("project_id", projectId)
+                .eq("work_month", workMonth.atTime(0, 0, 0));
+        return projectMonthlyDataMapper.selectOne(wrapper);
+    }
+
     private ProjectDetailResponse.ProjectEmployeeItem toProjectEmployeeItem(ProjectEmployee employee) {
         ProjectDetailResponse.ProjectEmployeeItem item = new ProjectDetailResponse.ProjectEmployeeItem();
         item.setId(employee.getId());
@@ -349,5 +365,29 @@ public class ProjectService {
         }
         item.setIsUsed(Boolean.TRUE);
         return item;
+    }
+
+    private List<MonthlyDataDetailResponse.EmployeeItem> resolveMonthlyEmployees(ProjectMonthlyData monthlyData,
+                                                                                 List<MonthlyDataDetailResponse.EmployeeItem> fallbackEmployees) {
+        if (monthlyData.getEmployeeData() == null || monthlyData.getEmployeeData().isBlank()) {
+            return fallbackEmployees;
+        }
+        try {
+            return OBJECT_MAPPER.readValue(monthlyData.getEmployeeData(), new TypeReference<List<MonthlyDataDetailResponse.EmployeeItem>>() {});
+        } catch (Exception ex) {
+            return fallbackEmployees;
+        }
+    }
+
+    private void validateProjectInput(Project project) {
+        if (!StringUtils.hasText(project.getProjectName())) {
+            throw new IllegalArgumentException("项目名称不能为空");
+        }
+        if (!StringUtils.hasText(project.getCode())) {
+            throw new IllegalArgumentException("项目编号不能为空");
+        }
+        if (project.getStartDate() == null) {
+            throw new IllegalArgumentException("开始日期不能为空");
+        }
     }
 }

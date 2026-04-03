@@ -25,7 +25,7 @@ public class EmployeeController {
     /**
      * 获取员工列表
      */
-    @GetMapping({"", "/getEmployee"})
+    @GetMapping
     public Result<List<Employee>> getEmployees() {
         CurrentUser currentUser = currentUserService.getCurrentUser();
         List<Employee> list = currentUser.isAdmin()
@@ -55,7 +55,7 @@ public class EmployeeController {
     /**
      * 创建员工
      */
-    @PostMapping({"", "/createEmployee"})
+    @PostMapping
     public Result<Void> createEmployee(@RequestBody Employee employee) {
         employeeService.createEmployee(employee, currentUserService.getCurrentUser());
         return Result.success();

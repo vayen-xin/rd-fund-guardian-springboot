@@ -13,6 +13,7 @@ public class MonthlyDataDetailResponse {
     private String settledAt;
     private Double grandTotal;
     private List<EmployeeItem> employees;
+    private List<EmployeeItem> availableEmployees;
     private List<DeviceItem> devices;
     private Map<String, Object> fees;
 

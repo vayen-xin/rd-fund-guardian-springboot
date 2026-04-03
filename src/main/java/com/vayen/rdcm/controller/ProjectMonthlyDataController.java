@@ -4,10 +4,12 @@ import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaCheckRole;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.MonthlyDataDetailResponse;
+import com.vayen.rdcm.dto.MonthlyFeeSchemaResponse;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
 import com.vayen.rdcm.security.CurrentUserService;
 import com.vayen.rdcm.service.ProjectMonthlyDataService;
 import com.vayen.rdcm.service.ProjectService;
+import com.vayen.rdcm.util.MonthlyFeeCatalog;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -46,6 +48,15 @@ public class ProjectMonthlyDataController {
     }
 
     /**
+     * 获取固定的月度费用分类目录。
+     */
+    @GetMapping("/monthly-fee-schema")
+    @SaCheckPermission("project:view")
+    public Result<MonthlyFeeSchemaResponse> getMonthlyFeeSchema() {
+        return Result.success(MonthlyFeeCatalog.buildResponse());
+    }
+
+    /**
      * 创建或更新月度数据
      */
     @PutMapping("/{projectId}/monthly/{month}")
@@ -60,6 +71,7 @@ public class ProjectMonthlyDataController {
                 projectId,
                 workMonth,
                 request.getCostData(),
+                request.getEmployeeData(),
                 request.getGrandTotal(),
                 currentUserService.getCurrentUserId()
         );
@@ -116,10 +128,13 @@ public class ProjectMonthlyDataController {
 
 class MonthlyDataSaveRequest {
     private String costData;
+    private String employeeData;
     private Double grandTotal;
 
     public String getCostData() { return costData; }
     public void setCostData(String costData) { this.costData = costData; }
+    public String getEmployeeData() { return employeeData; }
+    public void setEmployeeData(String employeeData) { this.employeeData = employeeData; }
     public Double getGrandTotal() { return grandTotal; }
     public void setGrandTotal(Double grandTotal) { this.grandTotal = grandTotal; }
 }

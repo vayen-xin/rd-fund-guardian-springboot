@@ -21,8 +21,8 @@ public interface ProjectMonthlyDataService extends IService<ProjectMonthlyData> 
     /**
      * 创建或更新月度数据
      */
-    void saveMonthlyData(Long projectId, LocalDate workMonth, String costData, 
-                         Double grandTotal, Long createdBy);
+    void saveMonthlyData(Long projectId, LocalDate workMonth, String costData,
+                         String employeeData, Double grandTotal, Long createdBy);
 
     void submitMonthlyData(Long projectId, LocalDate workMonth, Long operatorId);
     

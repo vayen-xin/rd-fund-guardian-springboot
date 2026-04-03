@@ -2,6 +2,9 @@ package com.vayen.rdcm.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vayen.rdcm.dto.MonthlyDataDetailResponse;
 import com.vayen.rdcm.entity.Project;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
 import com.vayen.rdcm.mapper.ProjectMonthlyDataMapper;
@@ -20,6 +23,8 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDataMapper, ProjectMonthlyData>
         implements ProjectMonthlyDataService {
+
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
 
     private final ProjectService projectService;
 
@@ -48,7 +53,7 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMonthlyData(Long projectId, LocalDate workMonth, String costData,
-                                Double grandTotal, Long createdBy) {
+                                String employeeData, Double grandTotal, Long createdBy) {
         LocalDateTime monthStart = toStartOfMonth(workMonth);
 
         ProjectMonthlyData monthlyData = getProjectMonthlyData(projectId, workMonth);
@@ -71,6 +76,7 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         }
 
         monthlyData.setCostData(costData);
+        monthlyData.setEmployeeData(normalizeEmployeeData(employeeData));
         monthlyData.setGrandTotal(grandTotal);
         monthlyData.setUpdatedAt(LocalDateTime.now());
 
@@ -134,6 +140,7 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
             newData.setProjectId(projectId);
             newData.setWorkMonth(toMonthStart);
             newData.setCostData("{}");
+            newData.setEmployeeData("[]");
             newData.setGrandTotal(0.0);
             newData.setLaborTotal(0.0);
             newData.setDirectMaterialTotal(0.0);
@@ -162,6 +169,7 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         newData.setProjectId(projectId);
         newData.setWorkMonth(toMonthStart);
         newData.setCostData(newCostData);
+        newData.setEmployeeData(lastMonthData.getEmployeeData());
         newData.setGrandTotal(0.0);
         newData.setLaborTotal(0.0);
         newData.setDirectMaterialTotal(0.0);
@@ -187,5 +195,17 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         wrapper.eq("project_id", projectId)
                 .orderByDesc("work_month");
         return this.list(wrapper);
+    }
+
+    private String normalizeEmployeeData(String employeeData) {
+        if (employeeData == null || employeeData.isBlank()) {
+            return "[]";
+        }
+        try {
+            List<?> parsed = OBJECT_MAPPER.readValue(employeeData, List.class);
+            return OBJECT_MAPPER.writeValueAsString(parsed);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("月度员工数据格式不正确", e);
+        }
     }
 }

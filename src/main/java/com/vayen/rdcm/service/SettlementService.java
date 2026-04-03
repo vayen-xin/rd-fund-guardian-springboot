@@ -57,6 +57,7 @@ public class SettlementService {
         }
         
         ProjectSettlement settlement = new ProjectSettlement();
+        settlement.setCompanyId(monthlyData.getCompanyId());
         settlement.setProjectId(projectId);
         settlement.setSettlementMonth(settlementMonthStart);
         settlement.setTotalAmount(monthlyData.getGrandTotal());
@@ -149,7 +150,8 @@ public class SettlementService {
         
         validateOtherCostRatio(monthlyData);
         validateOutsourcedCost(monthlyData);
-        
+
+        settlement.setCompanyId(monthlyData.getCompanyId());
         settlement.setTotalAmount(monthlyData.getGrandTotal());
         settlement.setStatus("re_settled");
         settlement.setUpdatedAt(LocalDateTime.now());

@@ -25,7 +25,7 @@ public class DeviceController {
     /**
      * 获取设备列表
      */
-    @GetMapping({"", "/getDevices"})
+    @GetMapping
     public Result<List<Device>> getDevices() {
         CurrentUser currentUser = currentUserService.getCurrentUser();
         Long companyId = currentUser.isAdmin() ? null : currentUser.getCompanyId();
@@ -53,7 +53,7 @@ public class DeviceController {
     /**
      * 创建设备
      */
-    @PostMapping({"", "/createDevices"})
+    @PostMapping
     public Result<Void> createDevice(@RequestBody Device device) {
         deviceService.createDevice(device, currentUserService.getCurrentUser());
         return Result.success();

@@ -26,7 +26,7 @@ public class CompanyController {
     /**
      * 获取所有公司
      */
-    @GetMapping("/getAllCompanies")
+    @GetMapping
     public Result<List<Company>> getAllCompanies() {
         List<Company> list = companyService.getAllCompanies();
         return Result.success(list);
@@ -45,7 +45,7 @@ public class CompanyController {
     /**
      * 创建公司
      */
-    @PostMapping("/creatCompany")
+    @PostMapping
     public Result<Void> createCompany(@RequestBody Company company) {
         company.setId(null);
         companyService.createCompany(company);
