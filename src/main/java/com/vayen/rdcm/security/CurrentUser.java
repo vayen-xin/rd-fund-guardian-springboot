@@ -3,9 +3,11 @@ package com.vayen.rdcm.security;
 import lombok.Builder;
 import lombok.Value;
 
+import java.io.Serializable;
+
 @Value
 @Builder
-public class CurrentUser {
+public class CurrentUser implements Serializable {
     Long id;
     Long companyId;
     String username;

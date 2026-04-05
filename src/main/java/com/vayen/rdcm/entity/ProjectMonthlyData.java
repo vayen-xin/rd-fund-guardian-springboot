@@ -9,7 +9,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 /**
- * 项目月度费用数据实体，按项目和月份存储费用及月度员工快照。
+ * 项目月度费用数据，包含费用明细和当月员工/设备快照。
  */
 @Data
 @TableName("project_monthly_data")
@@ -32,6 +32,9 @@ public class ProjectMonthlyData {
 
     @TableField("employee_data")
     private String employeeData;
+
+    @TableField("device_data")
+    private String deviceData;
 
     @TableField("labor_total")
     private Double laborTotal;

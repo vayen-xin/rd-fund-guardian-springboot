@@ -23,6 +23,8 @@ public class SystemLogPageResponse {
         private String module;
         private String action;
         private String details;
+        private String status;
+        private String resultMessage;
         private String ip;
         private String userAgent;
         private LocalDateTime createdAt;

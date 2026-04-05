@@ -2,6 +2,7 @@ package com.vayen.rdcm.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import cn.dev33.satoken.annotation.SaCheckRole;
+import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.MonthlyDataDetailResponse;
 import com.vayen.rdcm.dto.MonthlyFeeSchemaResponse;
@@ -17,7 +18,7 @@ import java.time.YearMonth;
 import java.util.List;
 
 /**
- * 项目月度费用数据控制器
+ * 项目月度费用接口。
  */
 @RestController
 @RequestMapping("/api/v1/projects")
@@ -48,7 +49,7 @@ public class ProjectMonthlyDataController {
     }
 
     /**
-     * 获取固定的月度费用分类目录。
+     * 获取固定的月度费用分类目录
      */
     @GetMapping("/monthly-fee-schema")
     @SaCheckPermission("project:view")
@@ -61,6 +62,7 @@ public class ProjectMonthlyDataController {
      */
     @PutMapping("/{projectId}/monthly/{month}")
     @SaCheckPermission("project:edit")
+    @AuditLog(module = "月度费用", action = "保存月度数据")
     public Result<Void> saveMonthlyData(
             @PathVariable Long projectId,
             @PathVariable String month,
@@ -72,6 +74,7 @@ public class ProjectMonthlyDataController {
                 workMonth,
                 request.getCostData(),
                 request.getEmployeeData(),
+                request.getDeviceData(),
                 request.getGrandTotal(),
                 currentUserService.getCurrentUserId()
         );
@@ -85,8 +88,7 @@ public class ProjectMonthlyDataController {
     @SaCheckPermission("project:view")
     public Result<List<ProjectMonthlyData>> getProjectMonthlyList(@PathVariable Long projectId) {
         projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
-        List<ProjectMonthlyData> list = monthlyDataService.getProjectMonthlyList(projectId);
-        return Result.success(list);
+        return Result.success(monthlyDataService.getProjectMonthlyList(projectId));
     }
 
     /**
@@ -94,6 +96,7 @@ public class ProjectMonthlyDataController {
      */
     @PostMapping("/{projectId}/monthly/{month}/submit")
     @SaCheckPermission("project:edit")
+    @AuditLog(module = "月度费用", action = "提交月度数据")
     public Result<Void> submitMonthlyData(
             @PathVariable Long projectId,
             @PathVariable String month) {
@@ -108,6 +111,7 @@ public class ProjectMonthlyDataController {
      */
     @PostMapping("/{projectId}/monthly/inherit")
     @SaCheckRole("admin")
+    @AuditLog(module = "月度费用", action = "继承月度数据")
     public Result<Void> triggerInherit(
             @PathVariable Long projectId,
             @RequestBody InheritRequest request) {
@@ -129,12 +133,15 @@ public class ProjectMonthlyDataController {
 class MonthlyDataSaveRequest {
     private String costData;
     private String employeeData;
+    private String deviceData;
     private Double grandTotal;
 
     public String getCostData() { return costData; }
     public void setCostData(String costData) { this.costData = costData; }
     public String getEmployeeData() { return employeeData; }
     public void setEmployeeData(String employeeData) { this.employeeData = employeeData; }
+    public String getDeviceData() { return deviceData; }
+    public void setDeviceData(String deviceData) { this.deviceData = deviceData; }
     public Double getGrandTotal() { return grandTotal; }
     public void setGrandTotal(Double grandTotal) { this.grandTotal = grandTotal; }
 }

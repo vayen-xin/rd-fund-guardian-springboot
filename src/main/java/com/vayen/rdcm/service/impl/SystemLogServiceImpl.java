@@ -9,10 +9,14 @@ import com.vayen.rdcm.mapper.SysUserMapper;
 import com.vayen.rdcm.mapper.SystemLogMapper;
 import com.vayen.rdcm.security.CurrentUser;
 import com.vayen.rdcm.security.CurrentUserService;
+import com.vayen.rdcm.security.RequestIpUtils;
 import com.vayen.rdcm.service.SystemLogService;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -22,6 +26,9 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * 系统日志服务。
+ */
 @Service
 @RequiredArgsConstructor
 public class SystemLogServiceImpl implements SystemLogService {
@@ -66,6 +73,46 @@ public class SystemLogServiceImpl implements SystemLogService {
         return response;
     }
 
+    @Override
+    public void record(String module, String action, String details) {
+        CurrentUser currentUser = null;
+        try {
+            currentUser = currentUserService.getCurrentUserOrNull();
+        } catch (Exception ignored) {
+        }
+        record(currentUser, module, action, details, SystemLogService.STATUS_SUCCESS, null);
+    }
+
+    @Override
+    public void record(CurrentUser currentUser, String module, String action, String details) {
+        record(currentUser, module, action, details, SystemLogService.STATUS_SUCCESS, null);
+    }
+
+    @Override
+    public void record(CurrentUser currentUser, String module, String action, String details, String status, String resultMessage) {
+        SystemLog systemLog = new SystemLog();
+        if (currentUser != null) {
+            systemLog.setCompanyId(currentUser.getCompanyId());
+            systemLog.setUserId(currentUser.getId());
+        }
+        systemLog.setModule(module);
+        systemLog.setAction(action);
+        systemLog.setDetails(details);
+        systemLog.setStatus(status);
+        systemLog.setResultMessage(resultMessage);
+        systemLog.setCreatedAt(LocalDateTime.now());
+
+        ServletRequestAttributes attributes =
+                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+        if (attributes != null) {
+            HttpServletRequest request = attributes.getRequest();
+            systemLog.setIp(RequestIpUtils.resolveClientIp(request));
+            systemLog.setUserAgent(request.getHeader("User-Agent"));
+        }
+
+        systemLogMapper.insert(systemLog);
+    }
+
     private List<Long> findMatchedUserIds(String operator, CurrentUser currentUser) {
         if (!StringUtils.hasText(operator)) {
             return Collections.emptyList();
@@ -104,6 +151,8 @@ public class SystemLogServiceImpl implements SystemLogService {
         item.setModule(log.getModule());
         item.setAction(log.getAction());
         item.setDetails(log.getDetails());
+        item.setStatus(log.getStatus());
+        item.setResultMessage(log.getResultMessage());
         item.setIp(log.getIp());
         item.setUserAgent(log.getUserAgent());
         item.setCreatedAt(log.getCreatedAt());

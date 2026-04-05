@@ -44,6 +44,12 @@ sa-token:
 app:
   cors:
     allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:5173,http://127.0.0.1:5173}
+  security:
+    login-limit:
+      enabled: ${APP_SECURITY_LOGIN_LIMIT_ENABLED:true}
+      max-failures: ${APP_SECURITY_LOGIN_LIMIT_MAX_FAILURES:8}
+      window-seconds: ${APP_SECURITY_LOGIN_LIMIT_WINDOW_SECONDS:300}
+      lock-seconds: ${APP_SECURITY_LOGIN_LIMIT_LOCK_SECONDS:900}
   upload:
     base-dir: ${APP_UPLOAD_BASE_DIR:./uploads}
 

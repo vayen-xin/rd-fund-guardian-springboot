@@ -2,6 +2,7 @@ package com.vayen.rdcm.controller;
 
 import cn.dev33.satoken.annotation.SaCheckPermission;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.PageResponse;
 import com.vayen.rdcm.dto.SettlementListItemResponse;
@@ -23,7 +24,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * 项目结算控制器
+ * 项目结算接口。
  */
 @RestController
 @RequestMapping("/api/v1/settlements")
@@ -93,6 +94,7 @@ public class SettlementController {
      */
     @PostMapping("/{projectId}/confirm")
     @SaCheckPermission("settlement:create")
+    @AuditLog(module = "项目结算", action = "确认结算")
     public Result<ProjectSettlement> confirmSettlement(
             @PathVariable Long projectId,
             @RequestBody SettlementActionRequest request) {
@@ -111,6 +113,7 @@ public class SettlementController {
      */
     @PostMapping("/{projectId}/reopen")
     @SaCheckPermission("settlement:edit")
+    @AuditLog(module = "项目结算", action = "重新结算")
     public Result<ProjectSettlement> reopenSettlement(
             @PathVariable Long projectId,
             @RequestBody SettlementActionRequest request) {

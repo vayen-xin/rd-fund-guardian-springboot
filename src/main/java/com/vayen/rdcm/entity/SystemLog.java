@@ -38,6 +38,12 @@ public class SystemLog {
     @TableField("details")
     private String details;
 
+    @TableField("status")
+    private String status;
+
+    @TableField("result_message")
+    private String resultMessage;
+
     @TableField("created_at")
     private LocalDateTime createdAt;
 }

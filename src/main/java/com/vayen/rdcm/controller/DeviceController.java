@@ -1,5 +1,6 @@
 package com.vayen.rdcm.controller;
 
+import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.OptionItemResponse;
 import com.vayen.rdcm.entity.Device;
@@ -10,6 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 设备管理接口。
+ */
 @RestController
 @RequestMapping("/api/v1/devices")
 public class DeviceController {
@@ -54,6 +58,7 @@ public class DeviceController {
      * 创建设备
      */
     @PostMapping
+    @AuditLog(module = "设备管理", action = "创建设备")
     public Result<Void> createDevice(@RequestBody Device device) {
         deviceService.createDevice(device, currentUserService.getCurrentUser());
         return Result.success();
@@ -63,6 +68,7 @@ public class DeviceController {
      * 更新设备
      */
     @PutMapping("/{id}")
+    @AuditLog(module = "设备管理", action = "更新设备")
     public Result<Void> updateDevice(@PathVariable Long id, @RequestBody Device device) {
         deviceService.updateDevice(id, device, currentUserService.getCurrentUser());
         return Result.success();
@@ -72,6 +78,7 @@ public class DeviceController {
      * 删除设备
      */
     @DeleteMapping("/{id}")
+    @AuditLog(module = "设备管理", action = "删除设备")
     public Result<Void> deleteDevice(@PathVariable Long id) {
         deviceService.removeDevice(id, currentUserService.getCurrentUser());
         return Result.success();

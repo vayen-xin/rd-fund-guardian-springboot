@@ -1,6 +1,7 @@
 package com.vayen.rdcm.controller;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.OptionItemResponse;
 import com.vayen.rdcm.dto.ProjectDetailResponse;
@@ -16,6 +17,9 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * 项目管理接口。
+ */
 @RestController
 @RequestMapping("/api/v1/projects")
 @AllArgsConstructor
@@ -66,6 +70,7 @@ public class ProjectController {
      * 创建项目
      */
     @PostMapping
+    @AuditLog(module = "项目管理", action = "创建项目")
     public Result<Void> createProject(@RequestBody ProjectRequest request) {
         Project project = buildProject(request);
         projectService.createProject(project, request.getEmployeeIds(), request.getDeviceIds(), currentUserService.getCurrentUser());
@@ -76,6 +81,7 @@ public class ProjectController {
      * 更新项目
      */
     @PutMapping("/{id}")
+    @AuditLog(module = "项目管理", action = "更新项目")
     public Result<Void> updateProject(@PathVariable Long id, @RequestBody ProjectRequest request) {
         projectService.updateProject(id, buildProject(request), request.getEmployeeIds(), request.getDeviceIds(), currentUserService.getCurrentUser());
         return Result.success();
@@ -85,6 +91,7 @@ public class ProjectController {
      * 删除项目
      */
     @DeleteMapping("/{id}")
+    @AuditLog(module = "项目管理", action = "删除项目")
     public Result<Void> deleteProject(@PathVariable Long id) {
         projectService.deleteProject(id, currentUserService.getCurrentUser());
         return Result.success();
@@ -94,6 +101,7 @@ public class ProjectController {
      * 更新项目状态
      */
     @PutMapping("/{id}/status")
+    @AuditLog(module = "项目管理", action = "更新项目状态")
     public Result<Void> updateStatus(@PathVariable Long id, @RequestParam String status) {
         projectService.updateStatus(id, status, currentUserService.getCurrentUser());
         return Result.success();
@@ -103,6 +111,7 @@ public class ProjectController {
      * 结束项目
      */
     @PutMapping("/{id}/end")
+    @AuditLog(module = "项目管理", action = "结束项目")
     public Result<Void> endProject(@PathVariable Long id) {
         projectService.updateStatus(id, "ended", currentUserService.getCurrentUser());
         return Result.success();

@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.vayen.rdcm.dto.MonthlyDataDetailResponse;
 import com.vayen.rdcm.entity.Project;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
 import com.vayen.rdcm.mapper.ProjectMonthlyDataMapper;
@@ -19,6 +18,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
+/**
+ * 项目月度费用服务实现。
+ */
 @Service
 @RequiredArgsConstructor
 public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDataMapper, ProjectMonthlyData>
@@ -28,59 +30,47 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
 
     private final ProjectService projectService;
 
-    /**
-     * 把 yyyy-MM 月份转换成数据库里统一使用的 yyyy-MM-01 00:00:00。
-     */
     private LocalDateTime toStartOfMonth(LocalDate month) {
         return month.atTime(0, 0, 0);
     }
 
     @Override
     public ProjectMonthlyData getProjectMonthlyData(Long projectId, LocalDate workMonth) {
-        LocalDateTime monthStart = toStartOfMonth(workMonth);
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
-                .eq("work_month", monthStart);
+                .eq("work_month", toStartOfMonth(workMonth));
         return this.getOne(wrapper);
     }
 
-    /**
-     * 保存月度草稿。
-     * 关键逻辑：
-     * 1. 校验前端传来的 grandTotal 是否和 JSON 计算值一致
-     * 2. 把新 8 类费用结构同步写入旧表里的冗余总额字段
-     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMonthlyData(Long projectId, LocalDate workMonth, String costData,
-                                String employeeData, Double grandTotal, Long createdBy) {
-        LocalDateTime monthStart = toStartOfMonth(workMonth);
-
+                                String employeeData, String deviceData, Double grandTotal, Long createdBy) {
         ProjectMonthlyData monthlyData = getProjectMonthlyData(projectId, workMonth);
         if (monthlyData == null) {
             Project project = projectService.getProjectRecord(projectId);
             monthlyData = new ProjectMonthlyData();
             monthlyData.setCompanyId(project.getCompanyId());
             monthlyData.setProjectId(projectId);
-            monthlyData.setWorkMonth(monthStart);
+            monthlyData.setWorkMonth(toStartOfMonth(workMonth));
             monthlyData.setCreatedBy(createdBy);
             monthlyData.setCreatedAt(LocalDateTime.now());
         }
 
-        // 防止前端总金额和明细 JSON 对不上，先做一致性校验。
+        double safeGrandTotal = grandTotal == null ? 0.0 : grandTotal;
         double calculatedTotal = JsonUtils.calculateGrandTotal(costData);
-        double diff = Math.abs(calculatedTotal - grandTotal);
-        if (diff > 0.01) {
-            throw new RuntimeException(String.format(
-                    "JSON 计算总和(%.2f)与传入总金额(%.2f)不一致", calculatedTotal, grandTotal));
+        if (Math.abs(calculatedTotal - safeGrandTotal) > 0.01) {
+            throw new IllegalArgumentException(
+                    String.format("JSON 计算总和(%.2f)与传入总金额(%.2f)不一致", calculatedTotal, safeGrandTotal)
+            );
         }
 
         monthlyData.setCostData(costData);
-        monthlyData.setEmployeeData(normalizeEmployeeData(employeeData));
-        monthlyData.setGrandTotal(grandTotal);
+        monthlyData.setEmployeeData(normalizeJsonArray(employeeData, "月度员工数据格式不正确"));
+        monthlyData.setDeviceData(normalizeJsonArray(deviceData, "月度设备数据格式不正确"));
+        monthlyData.setGrandTotal(safeGrandTotal);
         monthlyData.setUpdatedAt(LocalDateTime.now());
 
-        // 兼容旧表结构：虽然前端已经是 8 类费用，但数据库里还有历史冗余字段。
         JsonUtils.CostData parsed = JsonUtils.parseCostData(costData);
         monthlyData.setLaborTotal(parsed.getCategoryTotal("labor"));
         monthlyData.setDirectMaterialTotal(parsed.getCategoryTotal("direct"));
@@ -98,10 +88,6 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         this.saveOrUpdate(monthlyData);
     }
 
-    /**
-     * 把草稿提交成待结算状态。
-     * 当前先沿用旧表里的 finalized，后面如果要统一成 pending_settlement 再整体收口。
-     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void submitMonthlyData(Long projectId, LocalDate workMonth, Long operatorId) {
@@ -117,20 +103,12 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         this.updateById(monthlyData);
     }
 
-    /**
-     * 继承上月结构到新月份。
-     * 当前策略是保留条目结构，但把金额全部清零。
-     */
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void inheritFromLastMonth(Long projectId, LocalDate fromMonth, LocalDate toMonth,
-                                     Long operatorId) {
-        LocalDateTime fromMonthStart = toStartOfMonth(fromMonth);
-        LocalDateTime toMonthStart = toStartOfMonth(toMonth);
-
+    public void inheritFromLastMonth(Long projectId, LocalDate fromMonth, LocalDate toMonth, Long operatorId) {
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
-                .eq("work_month", fromMonthStart);
+                .eq("work_month", toStartOfMonth(fromMonth));
         ProjectMonthlyData lastMonthData = this.getOne(wrapper);
 
         if (lastMonthData == null) {
@@ -138,9 +116,10 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
             ProjectMonthlyData newData = new ProjectMonthlyData();
             newData.setCompanyId(project.getCompanyId());
             newData.setProjectId(projectId);
-            newData.setWorkMonth(toMonthStart);
+            newData.setWorkMonth(toStartOfMonth(toMonth));
             newData.setCostData("{}");
             newData.setEmployeeData("[]");
+            newData.setDeviceData("[]");
             newData.setGrandTotal(0.0);
             newData.setLaborTotal(0.0);
             newData.setDirectMaterialTotal(0.0);
@@ -160,16 +139,13 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
             return;
         }
 
-        // 继承时只保留结构，不把上月金额直接带到本月。
-        String oldCostData = lastMonthData.getCostData();
-        String newCostData = JsonUtils.zeroOutAmounts(oldCostData);
-
         ProjectMonthlyData newData = new ProjectMonthlyData();
         newData.setCompanyId(lastMonthData.getCompanyId());
         newData.setProjectId(projectId);
-        newData.setWorkMonth(toMonthStart);
-        newData.setCostData(newCostData);
+        newData.setWorkMonth(toStartOfMonth(toMonth));
+        newData.setCostData(JsonUtils.zeroOutAmounts(lastMonthData.getCostData()));
         newData.setEmployeeData(lastMonthData.getEmployeeData());
+        newData.setDeviceData(lastMonthData.getDeviceData());
         newData.setGrandTotal(0.0);
         newData.setLaborTotal(0.0);
         newData.setDirectMaterialTotal(0.0);
@@ -185,7 +161,6 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         newData.setCreatedBy(operatorId);
         newData.setCreatedAt(LocalDateTime.now());
         newData.setUpdatedAt(LocalDateTime.now());
-
         this.save(newData);
     }
 
@@ -197,15 +172,15 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         return this.list(wrapper);
     }
 
-    private String normalizeEmployeeData(String employeeData) {
-        if (employeeData == null || employeeData.isBlank()) {
+    private String normalizeJsonArray(String json, String errorMessage) {
+        if (json == null || json.isBlank()) {
             return "[]";
         }
         try {
-            List<?> parsed = OBJECT_MAPPER.readValue(employeeData, List.class);
+            List<?> parsed = OBJECT_MAPPER.readValue(json, List.class);
             return OBJECT_MAPPER.writeValueAsString(parsed);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("月度员工数据格式不正确", e);
+            throw new IllegalArgumentException(errorMessage, e);
         }
     }
 }

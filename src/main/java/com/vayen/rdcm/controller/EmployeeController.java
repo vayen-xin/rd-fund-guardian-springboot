@@ -1,5 +1,6 @@
 package com.vayen.rdcm.controller;
 
+import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.OptionItemResponse;
 import com.vayen.rdcm.entity.Employee;
@@ -10,6 +11,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
+/**
+ * 员工管理接口。
+ */
 @RestController
 @RequestMapping("/api/v1/employees")
 public class EmployeeController {
@@ -56,6 +60,7 @@ public class EmployeeController {
      * 创建员工
      */
     @PostMapping
+    @AuditLog(module = "员工管理", action = "创建员工")
     public Result<Void> createEmployee(@RequestBody Employee employee) {
         employeeService.createEmployee(employee, currentUserService.getCurrentUser());
         return Result.success();
@@ -65,6 +70,7 @@ public class EmployeeController {
      * 更新员工
      */
     @PutMapping("/{id}")
+    @AuditLog(module = "员工管理", action = "更新员工")
     public Result<Void> updateEmployee(@PathVariable Long id, @RequestBody Employee employee) {
         employeeService.updateEmployee(id, employee, currentUserService.getCurrentUser());
         return Result.success();
@@ -74,6 +80,7 @@ public class EmployeeController {
      * 删除员工
      */
     @DeleteMapping("/{id}")
+    @AuditLog(module = "员工管理", action = "删除员工")
     public Result<Void> deleteEmployee(@PathVariable Long id) {
         employeeService.deleteEmployee(id, currentUserService.getCurrentUser());
         return Result.success();

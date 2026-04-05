@@ -15,6 +15,7 @@ public class MonthlyDataDetailResponse {
     private List<EmployeeItem> employees;
     private List<EmployeeItem> availableEmployees;
     private List<DeviceItem> devices;
+    private List<DeviceItem> availableDevices;
     private Map<String, Object> fees;
 
     @Data
