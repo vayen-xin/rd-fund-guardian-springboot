@@ -15,6 +15,7 @@ import com.vayen.rdcm.service.SystemLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -25,6 +26,7 @@ import java.time.LocalDateTime;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
 
     private final AuthService authService;
@@ -40,15 +42,15 @@ public class AuthController {
     }
 
     /**
-     * 用户登录
+     * 用户登录。
      */
     @PostMapping("/login")
     public Result<LoginResponse> login(@RequestBody LoginRequest request, HttpServletRequest httpServletRequest) {
         String clientIp = RequestIpUtils.resolveClientIp(httpServletRequest);
         LocalDateTime lockedUntil = loginAttemptGuard.checkBlocked(clientIp);
         if (lockedUntil != null) {
-            systemLogService.record(null, "认证", "登录", "POST /api/auth/login",
-                    SystemLogService.STATUS_DENIED, "登录失败次数过多，IP 已被临时限制至 " + lockedUntil);
+            log.warn("IP {} 登录失败次数过多，已限制到 {}", clientIp, lockedUntil);
+            systemLogService.record(null, "认证", "登录", "POST /api/auth/login", SystemLogService.STATUS_DENIED, "IP 已被临时限制到 " + lockedUntil);
             return Result.error(429, "登录失败次数过多，请稍后再试");
         }
 
@@ -56,27 +58,26 @@ public class AuthController {
             LoginResponse response = authService.login(request.getUsername(), request.getPassword());
             loginAttemptGuard.recordSuccess(clientIp);
             CurrentUser currentUser = currentUserService.getCurrentUserOrNull();
-            systemLogService.record(currentUser, "认证", "登录", "POST /api/auth/login",
-                    SystemLogService.STATUS_SUCCESS, null);
+            log.info("用户 {} 登录成功，角色={}，公司ID={}", request.getUsername(), currentUser == null ? "-" : currentUser.getRole(), currentUser == null ? "-" : currentUser.getCompanyId());
+            systemLogService.record(currentUser, "认证", "登录", "POST /api/auth/login", SystemLogService.STATUS_SUCCESS, null);
             return Result.success(response);
         } catch (IllegalArgumentException ex) {
             LocalDateTime blockedAt = loginAttemptGuard.recordFailure(clientIp);
-            String resultMessage = blockedAt == null
-                    ? ex.getMessage()
-                    : ex.getMessage() + "；该 IP 已临时限制到 " + blockedAt;
-            systemLogService.record(null, "认证", "登录", "POST /api/auth/login",
-                    SystemLogService.STATUS_FAIL, resultMessage);
-            throw ex;
+            String resultMessage = blockedAt == null ? "账号或密码错误" : "账号或密码错误；该 IP 已限制到 " + blockedAt;
+            log.warn("用户 {} 登录失败，IP={}，原因={}", request.getUsername(), clientIp, resultMessage);
+            systemLogService.record(null, "认证", "登录", "POST /api/auth/login", SystemLogService.STATUS_FAIL, resultMessage);
+            return Result.error(blockedAt == null ? 400 : 429, blockedAt == null ? "账号或密码错误" : "登录失败次数过多，请稍后再试");
         }
     }
 
     /**
-     * 用户退出登录
+     * 用户退出登录。
      */
     @PostMapping("/logout")
     public Result<Void> logout() {
         if (StpUtil.isLogin()) {
             CurrentUser currentUser = currentUserService.getCurrentUser();
+            log.info("用户 {} 退出登录", currentUser.getUsername());
             systemLogService.record(currentUser, "认证", "退出登录", "POST /api/auth/logout");
         }
         authService.logout();
@@ -84,7 +85,7 @@ public class AuthController {
     }
 
     /**
-     * 获取当前登录用户信息
+     * 获取当前登录用户信息。
      */
     @GetMapping("/current")
     public Result<SysUser> currentUser() {

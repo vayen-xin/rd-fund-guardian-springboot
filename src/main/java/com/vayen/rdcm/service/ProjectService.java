@@ -23,6 +23,7 @@ import com.vayen.rdcm.mapper.ProjectSettlementMapper;
 import com.vayen.rdcm.security.CurrentUser;
 import com.vayen.rdcm.util.JsonUtils;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
@@ -40,6 +41,7 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProjectService {
 
     private static final DateTimeFormatter YEAR_MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM");
@@ -55,6 +57,8 @@ public class ProjectService {
     private final ProjectMonthlyDataMapper projectMonthlyDataMapper;
 
     public Page<Project> getProjects(CurrentUser currentUser, Integer page, Integer size, String status, String name) {
+        log.info("公司 {} 用户 {} 查询项目列表，页码={}，状态={}，名称={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), page, status, name);
         QueryWrapper<Project> wrapper = new QueryWrapper<>();
         if (!currentUser.isAdmin()) {
             wrapper.eq("company_id", currentUser.getCompanyId());
@@ -76,6 +80,8 @@ public class ProjectService {
     }
 
     public ProjectDetailResponse getProjectDetail(Long projectId, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 查询项目详情，projectId={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), projectId);
         Project project = getProjectById(projectId, currentUser);
         List<ProjectEmployee> projectEmployees = projectEmployeeService.getByProjectId(projectId);
         List<ProjectEquipment> projectEquipments = projectEquipmentService.getByProjectId(projectId);
@@ -104,6 +110,8 @@ public class ProjectService {
     }
 
     public MonthlyDataDetailResponse getMonthlyDetail(Long projectId, LocalDate workMonth, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 查询项目月度详情，projectId={}，月份={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), projectId, workMonth);
         getProjectById(projectId, currentUser);
         ProjectMonthlyData monthlyData = getProjectMonthlyDataRecord(projectId, workMonth);
         if (monthlyData == null) {
@@ -174,6 +182,8 @@ public class ProjectService {
     }
 
     public Project createProject(Project project, List<Long> employeeIds, List<Long> deviceIds, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 创建项目，项目名称={}，项目编号={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), project.getProjectName(), project.getCode());
         validateProjectInput(project);
         project.setId(null);
         if (!currentUser.isAdmin()) {
@@ -191,6 +201,8 @@ public class ProjectService {
     }
 
     public void updateProject(Long projectId, Project updateRequest, List<Long> employeeIds, List<Long> deviceIds, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 修改项目，projectId={}，项目名称={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), projectId, updateRequest.getProjectName());
         validateProjectInput(updateRequest);
         Project existing = getProjectById(projectId, currentUser);
         existing.setProjectName(updateRequest.getProjectName());
@@ -206,11 +218,15 @@ public class ProjectService {
     }
 
     public void deleteProject(Long projectId, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 删除项目，projectId={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), projectId);
         Project existing = getProjectById(projectId, currentUser);
         projectMapper.deleteById(existing.getId());
     }
 
     public void updateStatus(Long projectId, String status, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 修改项目状态，projectId={}，status={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), projectId, status);
         Project existing = getProjectById(projectId, currentUser);
         existing.setStatus(status);
         if ("ended".equals(status) && existing.getEndDate() == null) {

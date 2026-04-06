@@ -16,6 +16,7 @@ import com.vayen.rdcm.security.CurrentUser;
 import com.vayen.rdcm.service.AttendanceService;
 import com.vayen.rdcm.service.ProjectEmployeeService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.ss.usermodel.Row;
@@ -48,6 +49,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AttendanceServiceImpl implements AttendanceService {
 
     private static final String SOURCE_IMPORT = "system_import";
@@ -64,6 +66,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public PageResponse<AttendanceDtos.AttendanceListItem> list(CurrentUser currentUser, Integer page, Integer size, String employeeId, String name, String projectCode, LocalDate startDate, LocalDate endDate) {
+        log.info("公司 {} 用户 {} 查询打卡记录列表，page={}，employeeId={}，name={}，projectCode={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), page, employeeId, name, projectCode);
         LambdaQueryWrapper<AttendanceRecord> wrapper = new LambdaQueryWrapper<>();
         if (!currentUser.isAdmin()) {
             wrapper.eq(AttendanceRecord::getCompanyId, currentUser.getCompanyId());
@@ -97,6 +101,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public AttendanceDtos.AttendanceLookupResponse lookup(CurrentUser currentUser, String employeeId, String name) {
+        log.info("公司 {} 用户 {} 匹配打卡员工信息，employeeId={}，name={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), employeeId, name);
         AttendanceDtos.AttendanceLookupResponse response = new AttendanceDtos.AttendanceLookupResponse();
         Employee employee = findEmployee(currentUser, employeeId, name);
         if (employee == null) {
@@ -117,6 +123,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public AttendanceDtos.AttendanceImportPreviewResponse previewImport(CurrentUser currentUser, MultipartFile file, YearMonth month) {
+        log.info("公司 {} 用户 {} 预解析打卡导入文件，month={}，fileName={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), month, file == null ? "-" : file.getOriginalFilename());
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("请先上传打卡文件");
         }
@@ -191,6 +199,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public void confirmImport(CurrentUser currentUser, List<AttendanceDtos.AttendanceImportRow> rows) {
+        log.info("公司 {} 用户 {} 确认导入打卡记录，条数={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), rows == null ? 0 : rows.size());
         if (rows == null || rows.isEmpty()) {
             throw new IllegalArgumentException("没有可导入的打卡记录");
         }
@@ -204,6 +214,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public void save(CurrentUser currentUser, AttendanceDtos.AttendanceSaveRequest request) {
+        log.info("公司 {} 用户 {} 手动新增打卡记录，employeeId={}，projectCode={}，date={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), request.getEmployeeId(), request.getProjectCode(), request.getDate());
         validateSaveRequest(request);
         upsert(currentUser, request.getEmployeeId(), request.getName(), request.getProjectCode(), request.getDate(), request.getDuration(), SOURCE_MANUAL);
     }
@@ -213,6 +225,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public void update(CurrentUser currentUser, Long id, AttendanceDtos.AttendanceSaveRequest request) {
+        log.info("公司 {} 用户 {} 修改打卡记录，id={}，employeeId={}，projectCode={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), id, request.getEmployeeId(), request.getProjectCode());
         validateSaveRequest(request);
         AttendanceRecord existing = getById(currentUser, id);
         Employee employee = findEmployee(currentUser, request.getEmployeeId(), request.getName());
@@ -236,6 +250,8 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public void delete(CurrentUser currentUser, Long id) {
+        log.info("公司 {} 用户 {} 删除打卡记录，id={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), id);
         AttendanceRecord existing = getById(currentUser, id);
         attendanceRecordMapper.deleteById(existing.getId());
     }

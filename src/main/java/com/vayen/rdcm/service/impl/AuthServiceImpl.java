@@ -29,13 +29,16 @@ public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
      */
     @Override
     public LoginResponse login(String username, String password) {
+        log.info("用户 {} 发起登录请求", username);
         SysUser sysUser = sysUserService.getActiveByUsername(username);
         if (sysUser == null || !sysUserService.passwordMatches(password, sysUser.getPasswordHash())) {
-            throw new IllegalArgumentException("账号或密码有误");
+            log.warn("用户 {} 登录校验失败", username);
+            throw new IllegalArgumentException("账号或密码错误");
         }
 
         StpUtil.login(sysUser.getId());
         currentUserService.cacheCurrentUser(sysUser);
+        log.info("用户 {} 登录成功，loginId={}", username, sysUser.getId());
 
         LoginResponse loginResponse = new LoginResponse();
         loginResponse.setUserId(sysUser.getId());
@@ -49,6 +52,7 @@ public class AuthServiceImpl extends ServiceImpl<SysUserMapper, SysUser> impleme
     @Override
     public void logout() {
         if (StpUtil.isLogin()) {
+            log.info("用户 {} 执行退出登录", StpUtil.getLoginIdAsLong());
             StpUtil.logout();
         }
     }

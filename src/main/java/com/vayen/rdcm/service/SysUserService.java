@@ -10,12 +10,14 @@ import com.vayen.rdcm.security.CurrentUser;
 import com.vayen.rdcm.security.PasswordService;
 import com.vayen.rdcm.security.RoleConstants;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
 
     private final SysUserMapper userMapper;
@@ -49,6 +51,8 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      * 分页查询账号列表，并按当前登录人角色自动做数据隔离。
      */
     public Page<AccountResponse> getAccounts(CurrentUser currentUser, Integer page, Integer size, String keyword, String role) {
+        log.info("公司 {} 用户 {} 查询账号列表，page={}，keyword={}，role={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), page, keyword, role);
         QueryWrapper<SysUser> wrapper = new QueryWrapper<>();
         if (RoleConstants.USER.equals(RoleConstants.normalize(currentUser.getRole()))) {
             wrapper.eq("id", currentUser.getId());
@@ -73,6 +77,8 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      * branch_admin 只能在自己公司下创建 user，不能创建 admin 或 branch_admin。
      */
     public SysUser createUser(String username, String name, String role, String rawPassword, Long companyId, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 创建账号，username={}，role={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), username, role);
         if (findByUsername(username) != null) {
             throw new IllegalArgumentException("用户名已存在");
         }
@@ -103,6 +109,8 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      * 当前登录人不能停用自己。
      */
     public void updateUserStatus(Long targetUserId, boolean active, CurrentUser currentUser) {
+        log.info("公司 {} 用户 {} 修改账号状态，targetUserId={}，active={}",
+                currentUser.getCompanyId(), currentUser.getUsername(), targetUserId, active);
         if (RoleConstants.USER.equals(RoleConstants.normalize(currentUser.getRole()))) {
             throw new IllegalArgumentException("当前角色无权修改账号状态");
         }
@@ -119,6 +127,7 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      * 修改本人资料。
      */
     public void updateMyProfile(Long userId, String name, String email, String phone) {
+        log.info("用户 {} 修改个人资料", userId);
         SysUser user = userMapper.selectById(userId);
         if (user == null) {
             throw new IllegalArgumentException("账号不存在");
@@ -134,6 +143,7 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      * 修改本人密码。
      */
     public boolean changePassword(Long userId, String oldPassword, String newPassword) {
+        log.info("用户 {} 修改个人密码", userId);
         SysUser user = userMapper.selectById(userId);
         if (user == null) {
             return false;

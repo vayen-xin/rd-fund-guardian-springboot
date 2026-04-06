@@ -38,6 +38,7 @@ public class SettlementService {
 
     @Transactional(rollbackFor = Exception.class)
     public ProjectSettlement createSettlement(Long projectId, LocalDate settlementMonth, Long operatorId) {
+        log.info("用户 {} 发起项目结算，projectId={}，month={}", operatorId, projectId, settlementMonth);
         LocalDateTime settlementMonthStart = toStartOfMonth(settlementMonth);
 
         ProjectMonthlyData monthlyData = monthlyDataService.getProjectMonthlyData(projectId, settlementMonth);
@@ -126,6 +127,7 @@ public class SettlementService {
 
     @Transactional(rollbackFor = Exception.class)
     public ProjectSettlement reSettle(Long projectId, LocalDate settlementMonth, Long operatorId) {
+        log.info("用户 {} 重新打开项目结算，projectId={}，month={}", operatorId, projectId, settlementMonth);
         LocalDateTime settlementMonthStart = toStartOfMonth(settlementMonth);
         ProjectSettlement settlement = findSettlement(projectId, settlementMonthStart);
         if (settlement == null) {
