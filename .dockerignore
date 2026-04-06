@@ -1,0 +1,10 @@
+.git
+.idea
+.claude
+target
+uploads
+data
+node_modules
+*.zip
+*.log
+nul
