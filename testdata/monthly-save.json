@@ -1,0 +1,4 @@
+{
+  "costData": "{\"labor\":{\"manualItems\":[{\"name\":\"工资薪金\",\"amount\":5000,\"voucherIds\":[]}],\"systemItems\":[]},\"direct\":{\"manualItems\":[{\"name\":\"材料费用\",\"amount\":1200,\"voucherIds\":[]}],\"systemItems\":[]},\"deprec\":{\"manualItems\":[],\"systemItems\":[]},\"intangible\":{\"manualItems\":[],\"systemItems\":[]},\"design\":{\"manualItems\":[{\"name\":\"设计费用\",\"amount\":800,\"voucherIds\":[]}],\"systemItems\":[]},\"equip\":{\"manualItems\":[],\"systemItems\":[]},\"outsource\":{\"manualItems\":[{\"name\":\"委外研发\",\"amount\":3200,\"original_amount\":4000,\"voucherIds\":[]}],\"systemItems\":[]},\"other\":{\"manualItems\":[{\"name\":\"其他费用\",\"amount\":300,\"voucherIds\":[]}],\"systemItems\":[]}}",
+  "grandTotal": 10500
+}
