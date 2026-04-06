@@ -13,6 +13,7 @@ import com.vayen.rdcm.security.RequestIpUtils;
 import com.vayen.rdcm.service.SystemLogService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -31,7 +32,11 @@ import java.util.stream.Collectors;
  */
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class SystemLogServiceImpl implements SystemLogService {
+
+    private static final long ANONYMOUS_COMPANY_ID = 0L;
+    private static final long ANONYMOUS_USER_ID = 0L;
 
     private final SystemLogMapper systemLogMapper;
     private final SysUserMapper sysUserMapper;
@@ -90,27 +95,29 @@ public class SystemLogServiceImpl implements SystemLogService {
 
     @Override
     public void record(CurrentUser currentUser, String module, String action, String details, String status, String resultMessage) {
-        SystemLog systemLog = new SystemLog();
-        if (currentUser != null) {
-            systemLog.setCompanyId(currentUser.getCompanyId());
-            systemLog.setUserId(currentUser.getId());
-        }
-        systemLog.setModule(module);
-        systemLog.setAction(action);
-        systemLog.setDetails(details);
-        systemLog.setStatus(status);
-        systemLog.setResultMessage(resultMessage);
-        systemLog.setCreatedAt(LocalDateTime.now());
+        try {
+            SystemLog systemLog = new SystemLog();
+            systemLog.setCompanyId(currentUser != null && currentUser.getCompanyId() != null ? currentUser.getCompanyId() : ANONYMOUS_COMPANY_ID);
+            systemLog.setUserId(currentUser != null && currentUser.getId() != null ? currentUser.getId() : ANONYMOUS_USER_ID);
+            systemLog.setModule(module);
+            systemLog.setAction(action);
+            systemLog.setDetails(details);
+            systemLog.setStatus(status);
+            systemLog.setResultMessage(resultMessage);
+            systemLog.setCreatedAt(LocalDateTime.now());
 
-        ServletRequestAttributes attributes =
-                (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
-        if (attributes != null) {
-            HttpServletRequest request = attributes.getRequest();
-            systemLog.setIp(RequestIpUtils.resolveClientIp(request));
-            systemLog.setUserAgent(request.getHeader("User-Agent"));
-        }
+            ServletRequestAttributes attributes =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attributes != null) {
+                HttpServletRequest request = attributes.getRequest();
+                systemLog.setIp(RequestIpUtils.resolveClientIp(request));
+                systemLog.setUserAgent(request.getHeader("User-Agent"));
+            }
 
-        systemLogMapper.insert(systemLog);
+            systemLogMapper.insert(systemLog);
+        } catch (Exception ex) {
+            log.warn("写入 system_log 失败，module={}，action={}，status={}，error={}", module, action, status, ex.getMessage());
+        }
     }
 
     private List<Long> findMatchedUserIds(String operator, CurrentUser currentUser) {
