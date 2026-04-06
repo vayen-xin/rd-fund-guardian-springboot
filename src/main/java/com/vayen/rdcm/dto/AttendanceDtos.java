@@ -62,5 +62,7 @@ public class AttendanceDtos {
         private String employeeId;
         private String name;
         private String department;
+        private boolean exactMatch;
+        private String hint;
     }
 }

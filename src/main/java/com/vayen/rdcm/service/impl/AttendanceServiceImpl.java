@@ -2,7 +2,9 @@ package com.vayen.rdcm.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vayen.rdcm.dto.AttendanceDtos;
+import com.vayen.rdcm.dto.PageResponse;
 import com.vayen.rdcm.entity.AttendanceRecord;
 import com.vayen.rdcm.entity.Employee;
 import com.vayen.rdcm.entity.Project;
@@ -28,8 +30,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -61,7 +63,7 @@ public class AttendanceServiceImpl implements AttendanceService {
      * 查询打卡记录列表。
      */
     @Override
-    public List<AttendanceDtos.AttendanceListItem> list(CurrentUser currentUser, String employeeId, String name, String projectCode, LocalDate startDate, LocalDate endDate) {
+    public PageResponse<AttendanceDtos.AttendanceListItem> list(CurrentUser currentUser, Integer page, Integer size, String employeeId, String name, String projectCode, LocalDate startDate, LocalDate endDate) {
         LambdaQueryWrapper<AttendanceRecord> wrapper = new LambdaQueryWrapper<>();
         if (!currentUser.isAdmin()) {
             wrapper.eq(AttendanceRecord::getCompanyId, currentUser.getCompanyId());
@@ -84,7 +86,10 @@ public class AttendanceServiceImpl implements AttendanceService {
         wrapper.orderByDesc(AttendanceRecord::getWorkDate)
                 .orderByAsc(AttendanceRecord::getProjectCode)
                 .orderByAsc(AttendanceRecord::getEmployeeNo);
-        return attendanceRecordMapper.selectList(wrapper).stream().map(this::toListItem).toList();
+
+        Page<AttendanceRecord> result = attendanceRecordMapper.selectPage(new Page<>(page, size), wrapper);
+        List<AttendanceDtos.AttendanceListItem> list = result.getRecords().stream().map(this::toListItem).toList();
+        return new PageResponse<>(list, result.getCurrent(), result.getSize(), result.getTotal());
     }
 
     /**
@@ -92,14 +97,18 @@ public class AttendanceServiceImpl implements AttendanceService {
      */
     @Override
     public AttendanceDtos.AttendanceLookupResponse lookup(CurrentUser currentUser, String employeeId, String name) {
+        AttendanceDtos.AttendanceLookupResponse response = new AttendanceDtos.AttendanceLookupResponse();
         Employee employee = findEmployee(currentUser, employeeId, name);
         if (employee == null) {
-            throw new IllegalArgumentException("未找到匹配的员工信息");
+            response.setExactMatch(false);
+            response.setHint("未找到匹配员工，请继续输入更完整的工号或姓名");
+            return response;
         }
-        AttendanceDtos.AttendanceLookupResponse response = new AttendanceDtos.AttendanceLookupResponse();
         response.setEmployeeId(employee.getEmployeeId());
         response.setName(employee.getName());
         response.setDepartment(employee.getDepartment());
+        response.setExactMatch(exactEmployeeMatch(employee, employeeId, name));
+        response.setHint(response.isExactMatch() ? "已自动匹配到员工信息" : "已为你匹配最接近的员工，请确认后再保存");
         return response;
     }
 
@@ -128,27 +137,23 @@ public class AttendanceServiceImpl implements AttendanceService {
                 String employeeNo = readCell(row.getCell(1), formatter);
                 String employeeName = readCell(row.getCell(2), formatter);
                 String projectCode = readCell(row.getCell(3), formatter);
-
                 if (!StringUtils.hasText(employeeNo) || !StringUtils.hasText(employeeName) || !StringUtils.hasText(projectCode)) {
                     failedCount++;
                     continue;
                 }
 
                 Project matchedProject = findProject(currentUser, projectCode);
-                String projectName = matchedProject != null ? matchedProject.getProjectName() : "";
+                String projectName = matchedProject == null ? "" : matchedProject.getProjectName();
 
                 for (int day = 1; day <= 31; day++) {
-                    Cell dayCell = row.getCell(3 + day);
-                    String text = readCell(dayCell, formatter);
+                    String text = readCell(row.getCell(3 + day), formatter);
                     if (!StringUtils.hasText(text) || "-".equals(text)) {
                         continue;
                     }
-
                     if (day > month.lengthOfMonth()) {
                         failedCount++;
                         continue;
                     }
-
                     BigDecimal duration = parseDecimal(text);
                     if (duration == null || duration.compareTo(BigDecimal.ZERO) < 0) {
                         failedCount++;
@@ -218,7 +223,7 @@ public class AttendanceServiceImpl implements AttendanceService {
         existing.setEmployeeNo(request.getEmployeeId().trim());
         existing.setEmployeeName(request.getName().trim());
         existing.setProjectCode(request.getProjectCode().trim());
-        existing.setProjectName(matchedProject != null ? matchedProject.getProjectName() : null);
+        existing.setProjectName(matchedProject == null ? null : matchedProject.getProjectName());
         existing.setWorkDate(request.getDate());
         existing.setDurationHours(request.getDuration());
         existing.setSource(SOURCE_MANUAL);
@@ -288,11 +293,11 @@ public class AttendanceServiceImpl implements AttendanceService {
             existing.setCreatedAt(LocalDateTime.now());
         }
 
-        existing.setEmployeeId(employee != null ? employee.getId() : null);
+        existing.setEmployeeId(employee == null ? null : employee.getId());
         existing.setEmployeeNo(employeeNo.trim());
         existing.setEmployeeName(employeeName.trim());
         existing.setProjectCode(projectCode.trim());
-        existing.setProjectName(matchedProject != null ? matchedProject.getProjectName() : null);
+        existing.setProjectName(matchedProject == null ? null : matchedProject.getProjectName());
         existing.setWorkDate(date);
         existing.setDurationHours(duration);
         existing.setSource(source);
@@ -317,25 +322,37 @@ public class AttendanceServiceImpl implements AttendanceService {
     }
 
     /**
-     * 按工号或姓名匹配员工，允许导入时仅保存原始工号和姓名。
+     * 按工号或姓名模糊匹配员工。
      */
     private Employee findEmployee(CurrentUser currentUser, String employeeId, String name) {
         LambdaQueryWrapper<Employee> wrapper = new LambdaQueryWrapper<>();
         if (!currentUser.isAdmin()) {
             wrapper.eq(Employee::getCompanyId, currentUser.getCompanyId());
         }
-        if (StringUtils.hasText(employeeId)) {
-            wrapper.eq(Employee::getEmployeeId, employeeId.trim());
+        if (StringUtils.hasText(employeeId) && StringUtils.hasText(name)) {
+            wrapper.and(q -> q.eq(Employee::getEmployeeId, employeeId.trim()).or().eq(Employee::getName, name.trim()));
+        } else if (StringUtils.hasText(employeeId)) {
+            String keyword = employeeId.trim();
+            wrapper.and(q -> q.eq(Employee::getEmployeeId, keyword).or().likeRight(Employee::getEmployeeId, keyword));
+        } else if (StringUtils.hasText(name)) {
+            String keyword = name.trim();
+            wrapper.and(q -> q.eq(Employee::getName, keyword).or().likeRight(Employee::getName, keyword));
+        } else {
+            return null;
         }
-        if (StringUtils.hasText(name)) {
-            wrapper.eq(Employee::getName, name.trim());
-        }
+        wrapper.orderByAsc(Employee::getEmployeeId).last("limit 5");
         List<Employee> employees = employeeMapper.selectList(wrapper);
         if (employees.isEmpty()) {
             return null;
         }
-        employees.sort(Comparator.comparing(Employee::getId));
+        employees.sort(Comparator.comparing(Employee::getEmployeeId, Comparator.nullsLast(String::compareTo)));
         return employees.get(0);
+    }
+
+    private boolean exactEmployeeMatch(Employee employee, String employeeId, String name) {
+        boolean employeeIdMatched = StringUtils.hasText(employeeId) && employeeId.trim().equals(employee.getEmployeeId());
+        boolean nameMatched = StringUtils.hasText(name) && name.trim().equals(employee.getName());
+        return employeeIdMatched || nameMatched;
     }
 
     private Project findProject(CurrentUser currentUser, String projectCode) {
@@ -429,7 +446,7 @@ public class AttendanceServiceImpl implements AttendanceService {
                 Employee employee = employeeMap.get(relation.getEmployeeId());
                 Row row = sheet.createRow(index + 1);
                 row.createCell(0).setCellValue(index + 1);
-                row.createCell(1).setCellValue(employee != null ? employee.getEmployeeId() : "");
+                row.createCell(1).setCellValue(employee == null ? "" : employee.getEmployeeId());
                 row.createCell(2).setCellValue(relation.getEmployeeName());
                 row.createCell(3).setCellValue(project.getCode());
                 for (int day = 1; day <= 31; day++) {
@@ -438,7 +455,6 @@ public class AttendanceServiceImpl implements AttendanceService {
                 }
             }
 
-            // 固定模板列宽，避免 Excel 对短字符列和中文列自动拉伸得过于别扭。
             sheet.setColumnWidth(0, 8 * 256);
             sheet.setColumnWidth(1, 14 * 256);
             sheet.setColumnWidth(2, 12 * 256);

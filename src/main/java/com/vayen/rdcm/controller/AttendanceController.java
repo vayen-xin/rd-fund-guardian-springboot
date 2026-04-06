@@ -3,6 +3,7 @@ package com.vayen.rdcm.controller;
 import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
 import com.vayen.rdcm.dto.AttendanceDtos;
+import com.vayen.rdcm.dto.PageResponse;
 import com.vayen.rdcm.security.CurrentUserService;
 import com.vayen.rdcm.service.AttendanceService;
 import com.vayen.rdcm.service.impl.AttendanceServiceImpl;
@@ -32,7 +33,7 @@ public class AttendanceController {
     private final CurrentUserService currentUserService;
 
     /**
-     * 下载打卡导入模板
+     * 下载打卡导入模板。
      */
     @GetMapping("/template")
     public ResponseEntity<Resource> downloadTemplate(
@@ -51,20 +52,31 @@ public class AttendanceController {
     }
 
     /**
-     * 查询打卡记录列表
+     * 查询打卡记录列表。
      */
     @GetMapping
-    public Result<List<AttendanceDtos.AttendanceListItem>> list(
+    public Result<PageResponse<AttendanceDtos.AttendanceListItem>> list(
+            @RequestParam(defaultValue = "1") Integer page,
+            @RequestParam(defaultValue = "10") Integer size,
             @RequestParam(required = false) String employeeId,
             @RequestParam(required = false) String name,
             @RequestParam(required = false) String projectCode,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(pattern = "yyyy-MM-dd") LocalDate endDate) {
-        return Result.success(attendanceService.list(currentUserService.getCurrentUser(), employeeId, name, projectCode, startDate, endDate));
+        return Result.success(attendanceService.list(
+                currentUserService.getCurrentUser(),
+                page,
+                size,
+                employeeId,
+                name,
+                projectCode,
+                startDate,
+                endDate
+        ));
     }
 
     /**
-     * 按工号或姓名匹配员工信息
+     * 按工号或姓名匹配员工信息。
      */
     @GetMapping("/lookup")
     public Result<AttendanceDtos.AttendanceLookupResponse> lookup(
@@ -74,7 +86,7 @@ public class AttendanceController {
     }
 
     /**
-     * 上传 Excel 并预解析打卡记录
+     * 上传 Excel 并预解析打卡记录。
      */
     @PostMapping(value = "/preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public Result<AttendanceDtos.AttendanceImportPreviewResponse> preview(
@@ -84,7 +96,7 @@ public class AttendanceController {
     }
 
     /**
-     * 确认导入预解析后的打卡记录
+     * 确认导入预解析后的打卡记录。
      */
     @PostMapping("/confirm")
     @AuditLog(module = "打卡记录", action = "确认导入打卡")
@@ -94,7 +106,7 @@ public class AttendanceController {
     }
 
     /**
-     * 手动新增打卡记录
+     * 手动新增打卡记录。
      */
     @PostMapping
     @AuditLog(module = "打卡记录", action = "新增打卡记录")
@@ -104,7 +116,7 @@ public class AttendanceController {
     }
 
     /**
-     * 修改打卡记录
+     * 修改打卡记录。
      */
     @PutMapping("/{id}")
     @AuditLog(module = "打卡记录", action = "修改打卡记录")
@@ -114,7 +126,7 @@ public class AttendanceController {
     }
 
     /**
-     * 删除打卡记录
+     * 删除打卡记录。
      */
     @DeleteMapping("/{id}")
     @AuditLog(module = "打卡记录", action = "删除打卡记录")

@@ -1,6 +1,7 @@
 package com.vayen.rdcm.service;
 
 import com.vayen.rdcm.dto.AttendanceDtos;
+import com.vayen.rdcm.dto.PageResponse;
 import com.vayen.rdcm.security.CurrentUser;
 import org.springframework.core.io.Resource;
 import org.springframework.web.multipart.MultipartFile;
@@ -11,7 +12,7 @@ import java.util.List;
 
 public interface AttendanceService {
 
-    List<AttendanceDtos.AttendanceListItem> list(CurrentUser currentUser, String employeeId, String name, String projectCode, LocalDate startDate, LocalDate endDate);
+    PageResponse<AttendanceDtos.AttendanceListItem> list(CurrentUser currentUser, Integer page, Integer size, String employeeId, String name, String projectCode, LocalDate startDate, LocalDate endDate);
 
     AttendanceDtos.AttendanceLookupResponse lookup(CurrentUser currentUser, String employeeId, String name);
 

@@ -134,7 +134,7 @@ public class ExpenseVoucherService {
     public ExpenseVoucher findByProjectMonthCategoryAndName(Long projectId, String yearMonth, String category, String fileName) {
         QueryWrapper<ExpenseVoucher> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
-                .eq("year_month", yearMonth)
+                .eq("`year_month`", yearMonth)
                 .eq("category", category)
                 .eq("original_file_name", fileName);
         return expenseVoucherMapper.selectOne(wrapper);

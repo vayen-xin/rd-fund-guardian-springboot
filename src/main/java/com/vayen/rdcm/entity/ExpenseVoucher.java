@@ -21,7 +21,7 @@ public class ExpenseVoucher {
     @TableField("project_id")
     private Long projectId;
 
-    @TableField("year_month")
+    @TableField("`year_month`")
     private String yearMonth;
 
     @TableField("category")

@@ -1,5 +1,7 @@
 package com.vayen.rdcm.controller;
 
+import cn.dev33.satoken.annotation.SaCheckRole;
+import cn.dev33.satoken.annotation.SaMode;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.vayen.rdcm.audit.AuditLog;
 import com.vayen.rdcm.common.Result;
@@ -26,7 +28,7 @@ public class AccountController {
     private final CurrentUserService currentUserService;
 
     /**
-     * 获取账号列表
+     * 获取账号列表。
      */
     @GetMapping
     public Result<PageResponse<AccountResponse>> getAccounts(
@@ -40,9 +42,10 @@ public class AccountController {
     }
 
     /**
-     * 创建账号
+     * 创建账号。
      */
     @PostMapping
+    @SaCheckRole(value = {"admin", "branch_admin"}, mode = SaMode.OR)
     @AuditLog(module = "账号管理", action = "创建账号")
     public Result<AccountResponse> createAccount(@RequestBody CreateAccountRequest request) {
         CurrentUser currentUser = currentUserService.getCurrentUser();
@@ -58,9 +61,10 @@ public class AccountController {
     }
 
     /**
-     * 修改账号状态
+     * 修改账号状态。
      */
     @PutMapping("/{id}/status")
+    @SaCheckRole(value = {"admin", "branch_admin"}, mode = SaMode.OR)
     @AuditLog(module = "账号管理", action = "修改账号状态")
     public Result<Void> updateStatus(@PathVariable Long id, @RequestBody UpdateStatusRequest request) {
         sysUserService.updateUserStatus(id, "enabled".equalsIgnoreCase(request.getStatus()), currentUserService.getCurrentUser());
@@ -68,7 +72,7 @@ public class AccountController {
     }
 
     /**
-     * 修改本人资料
+     * 修改本人资料。
      */
     @PutMapping("/me/profile")
     @AuditLog(module = "账号管理", action = "修改个人资料")
@@ -83,7 +87,7 @@ public class AccountController {
     }
 
     /**
-     * 修改本人密码
+     * 修改本人密码。
      */
     @PutMapping("/me/password")
     @AuditLog(module = "账号管理", action = "修改密码")

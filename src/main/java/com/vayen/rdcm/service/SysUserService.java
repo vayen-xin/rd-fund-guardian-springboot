@@ -50,7 +50,9 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      */
     public Page<AccountResponse> getAccounts(CurrentUser currentUser, Integer page, Integer size, String keyword, String role) {
         QueryWrapper<SysUser> wrapper = new QueryWrapper<>();
-        if (!currentUser.isAdmin()) {
+        if (RoleConstants.USER.equals(RoleConstants.normalize(currentUser.getRole()))) {
+            wrapper.eq("id", currentUser.getId());
+        } else if (!currentUser.isAdmin()) {
             wrapper.eq("company_id", currentUser.getCompanyId());
         }
         if (keyword != null && !keyword.isBlank()) {
@@ -101,6 +103,9 @@ public class SysUserService extends ServiceImpl<SysUserMapper, SysUser> {
      * 当前登录人不能停用自己。
      */
     public void updateUserStatus(Long targetUserId, boolean active, CurrentUser currentUser) {
+        if (RoleConstants.USER.equals(RoleConstants.normalize(currentUser.getRole()))) {
+            throw new IllegalArgumentException("当前角色无权修改账号状态");
+        }
         SysUser target = getAccessibleUser(targetUserId, currentUser);
         if (target.getId().equals(currentUser.getId()) && !active) {
             throw new IllegalArgumentException("不能停用当前登录账号");
