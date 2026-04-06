@@ -1,207 +1,179 @@
-# 后端代码说明
+# rd-fund-guardian-springboot
 
-## 📦 技术栈
+研发费用合规智能管理系统后端项目。
 
-- **Spring Boot**: 4.0.2
-- **Java**: 17
-- **数据库**: H2 Database (TCP 模式)
-- **ORM**: MyBatis（纯 MyBatis 方案）
-- **权限认证**: Sa-Token 1.39.0
-- **Lombok**: @Data 注解简化代码
+本项目基于 `Spring Boot 3 + Java 17 + MyBatis-Plus + Sa-Token + MySQL`，用于支撑研发费用归集、项目月度汇总、待结算处理、打卡记录导入、账号与日志管理等核心业务。
 
----
+## 技术栈
 
-## 🗂️ 代码结构
+- `Spring Boot 3.2.4`
+- `Java 17`
+- `MyBatis-Plus 3.5.10.1`
+- `Sa-Token 1.39.0`
+- `MySQL 8`
+- `Apache POI`：Excel 导入导出
+- `Lombok`
 
-```
-src/main/
-├── java/com/vayen/rdcm/
-│   ├── common/              # 公共类
-│   │   ├── Result.java                 # 统一响应格式
-│   │   └── GlobalExceptionHandler.java # 全局异常处理
-│   ├── config/              # 配置类
-│   │   └── SaTokenConfig.java          # Sa-Token 配置
-│   ├── controller/          # Controller 层
-│   │   └── AuthController.java         # 认证接口
-│   ├── dto/                 # 数据传输对象
-│   │   ├── LoginRequest.java
-│   │   └── LoginResponse.java
-│   ├── entity/              # 实体类（10 个）
-│   │   ├── UserAccount.java
-│   │   ├── Employee.java
-│   │   ├── Equipment.java
-│   │   ├── ClockInRecord.java
-│   │   ├── Project.java
-│   │   ├── ProjectEmployee.java
-│   │   ├── ProjectEquipment.java
-│   │   ├── ProjectSettlement.java
-│   │   ├── ExpenseVoucher.java
-│   │   └── OperationLog.java
-│   ├── mapper/              # MyBatis Mapper 接口
-│   │   ├── UserMapper.java
-│   │   ├── EmployeeMapper.java
-│   │   ├── ProjectMapper.java
-│   │   ├── ProjectEmployeeMapper.java
-│   │   └── ... (后续补充)
-│   └── RdcmApplication.java # 启动类
-└── resources/
-    ├── mapper/              # MyBatis XML Mapper
-    │   ├── UserMapper.xml
-    │   ├── EmployeeMapper.xml
-    │   ├── ProjectMapper.xml
-    │   ├── ProjectEmployeeMapper.xml
-    │   └── ... (后续补充)
-    ├── data.sql             # 数据库初始化脚本
-    └── application.yml      # 配置文件
-```
+## 核心功能
 
----
+- 认证与权限
+  - 基于 `Sa-Token` 的登录认证
+  - 角色：`admin`、`branch_admin`、`user`
+  - 登录失败限流
 
-## 💡 数据库操作方式
+- 基础数据管理
+  - 员工管理
+  - 设备管理
+  - 打卡记录导入、预解析、确认导入
 
-本项目采用**纯 MyBatis**方案：
+- 项目管理
+  - 项目创建、列表、详情、结束
+  - 项目关联员工与设备
+  - 项目月度费用汇总
 
-```java
-@Autowired
-private EmployeeMapper employeeMapper;
+- 月度与结算
+  - 8 大费用分类及子分类
+  - 月度保存、重新编辑
+  - 发起待结算、确认结算、重新打开编辑
+  - 凭证文件上传、下载、删除
 
-// 查询所有启用员工
-List<Employee> employees = employeeMapper.findAllActive();
+- 系统管理
+  - 账号管理
+  - 操作日志查询
+  - 关键业务审计日志
 
-// 保存员工
-Employee emp = new Employee();
-emp.setName("张三");
-emp.setType("正式");
-employeeMapper.insert(emp);
+## 目录结构
 
-// 批量操作
-employeeMapper.batchInsert(list);
+```text
+src/main/java/com/vayen/rdcm
+├─ audit/              审计注解与切面
+├─ common/             通用返回与全局异常处理
+├─ config/             Spring / MyBatis / Sa-Token 配置
+├─ controller/         接口层
+├─ dto/                请求与响应对象
+├─ entity/             实体类
+├─ logging/            SpringBoot 应用日志切面
+├─ mapper/             MyBatis-Plus Mapper
+├─ security/           当前用户、权限、登录安全
+├─ service/            业务接口
+├─ service/impl/       业务实现
+├─ task/               定时任务
+└─ util/               JSON、费用目录等工具类
 ```
 
-**优势**:
-- 你熟悉 MyBatis，上手快
-- SQL 灵活，便于优化
-- 便于后续复杂查询和动态 SQL
-
----
-
-## 🚀 本地测试步骤
+## 本地运行
 
 ### 1. 环境要求
-- JDK 17+
-- Maven 3.6+
 
-### 2. 启动项目
-```bash
-cd /root/.openclaw/workspace/projects/rd-fund-guardian/backend
+- `JDK 17+`
+- `Maven 3.6+` 或项目自带 `mvnw.cmd`
+- `MySQL 8`
+
+### 2. 数据库准备
+
+默认配置见 [application.yml](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/src/main/resources/application.yml)：
+
+```yaml
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/rdcm?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+```
+
+请先本地创建数据库：
+
+```sql
+CREATE DATABASE rdcm DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+```
+
+项目中提供了初始化脚本：
+
+- [schema-v4.sql](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/src/main/resources/schema-v4.sql)
+- [data.sql](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/src/main/resources/data.sql)
+
+如果需要，也可以执行 `docs/sql` 目录下的增量脚本。
+
+### 3. 启动项目
+
+推荐使用 Maven Wrapper：
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+或使用本机 Maven：
+
+```powershell
 mvn spring-boot:run
 ```
 
-### 3. 访问 H2 Console
-- URL: http://localhost:8080/h2-console
-- JDBC URL: `jdbc:h2:tcp://localhost:9092/./data/rdcm_db`
-- 用户名：sa
-- 密码：空
+默认启动地址：
 
-### 4. 测试 API
+- 后端接口：`http://localhost:8080`
 
-```bash
-# 1. 登录获取 token
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username": "admin", "password": "admin123"}'
+## 关键配置
 
-# 响应：{"code":200,"data":{"token":"Bearer xxx","userId":1}}
+### CORS
 
-# 2. 使用 token 访问受保护接口
-curl http://localhost:8080/api/auth/current \
-  -H "Authorization: Bearer <your-token>"
+前端开发地址通过环境变量控制：
 
-# 3. 登出
-curl -X POST http://localhost:8080/api/auth/logout \
-  -H "Authorization: Bearer <your-token>"
+```yaml
+app:
+  cors:
+    allowed-origin-patterns: ${APP_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:5173,http://127.0.0.1:5173}
 ```
 
----
+### 登录限流
 
-## 📝 已实现功能
+```yaml
+app:
+  security:
+    login-limit:
+      enabled: true
+      max-failures: 8
+      window-seconds: 300
+      lock-seconds: 900
+```
 
-### ✅ 数据库设计
-- 10 张表（无外键约束）
-- JSON 字段支持（凭证文件、操作日志）
-- 索引优化
+### 文件上传
 
-### ✅ 实体类（10 个）
-- 全部使用 @Data 注解
-- 自动时间戳（@PrePersist）
+```yaml
+app:
+  upload:
+    base-dir: ${APP_UPLOAD_BASE_DIR:./uploads}
+```
 
-### ✅ MyBatis Mapper（4 个）
-- UserMapper（用户）
-- EmployeeMapper（员工）
-- ProjectMapper（项目）
-- ProjectEmployeeMapper（项目 - 员工关联）
-- XML 配置 + 接口注解
+生产环境建议把上传目录挂载到容器外部。
 
-### ✅ Sa-Token 权限认证
-- 依赖引入（1.39.0）
-- 配置类（拦截器）
-- 登录/登出接口
-- 全局异常处理
-- 统一响应格式
+## 默认接口约定
 
-### ✅ 初始化脚本
-- data.sql（建表 + 测试数据）
-- 应用启动自动执行
+- 登录：`POST /api/auth/login`
+- 当前用户：`GET /api/auth/current`
+- 退出登录：`POST /api/auth/logout`
+- 统一返回：`code / message / data`
+- 认证头：`Authorization: Bearer <token>`
 
----
+## 测试数据
 
-## ⏭️ 待开发功能
+项目根目录提供了简单测试请求样例：
 
-1. **剩余 Mapper**
-   - EquipmentMapper
-   - ClockInRecordMapper
-   - ProjectSettlementMapper
-   - ExpenseVoucherMapper
-   - OperationLogMapper
+- [testdata/login.json](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/testdata/login.json)
+- [testdata/create-project.json](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/testdata/create-project.json)
+- [testdata/monthly-save.json](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/testdata/monthly-save.json)
+- [testdata/confirm-settlement.json](C:/Users/dell/Desktop/RDCM/rd-fund-guardian/rd-fund-guardian-springboot/testdata/confirm-settlement.json)
 
-2. **Service 层**
-   - 业务逻辑封装
-   - 事务管理（@Transactional）
+## 部署建议
 
-3. **Controller 层**
-   - 员工管理 API
-   - 设备管理 API
-   - 项目管理 API
-   - 结算管理 API
+- 使用 `application-prod.yml` 或环境变量区分生产配置
+- MySQL 单独部署
+- 上传目录挂载到宿主机
+- 日志建议通过 Docker / 服务器日志统一收集
 
-4. **文件上传**
-   - 凭证文件上传
-   - 存储路径管理
+## 当前版本说明
 
-5. **审计包生成**
-   - PDF 报表生成
-   - ZIP 打包下载
+当前代码已经可以作为第一版测试版使用，适合：
 
----
-
-## ⚠️ 注意事项
-
-1. **Lombok 插件**: IDEA 需安装 Lombok 插件
-2. **H2 数据持久化**: 数据保存在 `./data/rdcm_db`
-3. **端口占用**: 确保 8080 和 9092 端口未被占用
-4. **字符编码**: 数据库使用 UTF-8
-5. **密码加密**: 目前使用明文对比，后续需改为 BCrypt
-6. **Token 认证**: 请求头需带 `Authorization: Bearer <token>`
-
----
-
-## 📖 相关文档
-
-- [数据库设计文档.md](./数据库设计文档.md)
-- [Sa-Token 使用指南.md](./Sa-Token 使用指南.md)
-- [功能需求文档](../../研发项目资金合规管理 - 开发功能文档 2.0.docx)
-
----
-
-**更新时间**: 2026-03-07  
-**版本**: V2.0（纯 MyBatis + Sa-Token）
+- 小伙伴联调测试
+- 老师演示查看
+- 收集甲方反馈前的内部试运行
