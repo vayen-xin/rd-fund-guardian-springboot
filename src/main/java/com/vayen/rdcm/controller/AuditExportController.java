@@ -73,8 +73,8 @@ public class AuditExportController {
                 YearMonth.parse(endMonth),
                 currentUser
         );
-        String fileName = "研发支出辅助账-" + startMonth + "-" + endMonth + ".xlsx";
-        return buildDownloadResponse(bytes, fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        String fileName = "研发支出辅助账-" + startMonth + "-" + endMonth + ".xls";
+        return buildDownloadResponse(bytes, fileName, "application/vnd.ms-excel");
     }
 
     private ResponseEntity<Resource> buildDownloadResponse(byte[] bytes, String fileName, String contentType) {

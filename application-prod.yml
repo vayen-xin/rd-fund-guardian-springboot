@@ -53,6 +53,9 @@ app:
       lock-seconds: ${APP_SECURITY_LOGIN_LIMIT_LOCK_SECONDS:900}
   upload:
     base-dir: ${APP_UPLOAD_BASE_DIR:/data/rdcm/uploads}
+  audit-template:
+    company-wage-path: ${APP_AUDIT_COMPANY_WAGE_PATH:/data/rdcm/templates/附件二、研发工资明细表.xls}
+    project-ledger-path: ${APP_AUDIT_PROJECT_LEDGER_PATH:/data/rdcm/templates/2.研发支出”辅助账RD01明细.xls}
 
 logging:
   level:

@@ -3,6 +3,7 @@ package com.vayen.rdcm.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.vayen.rdcm.config.AuditTemplateProperties;
 import com.vayen.rdcm.entity.AttendanceRecord;
 import com.vayen.rdcm.entity.Company;
 import com.vayen.rdcm.entity.Project;
@@ -12,31 +13,29 @@ import com.vayen.rdcm.mapper.CompanyMapper;
 import com.vayen.rdcm.mapper.ProjectMapper;
 import com.vayen.rdcm.mapper.ProjectMonthlyDataMapper;
 import com.vayen.rdcm.security.CurrentUser;
+import com.vayen.rdcm.util.ExcelTemplateUtils;
 import lombok.Builder;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.VerticalAlignment;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -53,9 +52,10 @@ public class CompanyWageExportService {
     private final ProjectMapper projectMapper;
     private final AttendanceRecordMapper attendanceRecordMapper;
     private final ProjectMonthlyDataMapper projectMonthlyDataMapper;
+    private final AuditTemplateProperties auditTemplateProperties;
 
     /**
-     * 导出公司级研发工资明细表。
+     * 导出公司级研发工资明细表
      */
     public byte[] exportWorkbook(Long companyId, YearMonth startMonth, YearMonth endMonth, CurrentUser currentUser) {
         if (companyId == null) {
@@ -77,14 +77,18 @@ public class CompanyWageExportService {
         log.info("用户 {} 导出公司工资明细表，companyId={}，period={}~{}",
                 currentUser.getUsername(), companyId, startMonth, endMonth);
 
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+        Workbook workbook = ExcelTemplateUtils.loadTemplate(auditTemplateProperties.getCompanyWagePath());
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            pruneMonthSheets(workbook, context.getMonths());
+            removeSheetByNameContains(workbook, "差异");
             writeInstructionSheet(workbook, context);
             writeRosterSheet(workbook, context);
             writeSummarySheet(workbook, context);
-            writeDiffSheet(workbook, context);
             for (YearMonth month : context.getMonths()) {
-                writeMonthlySheet(workbook, context, month);
-                writeAttendanceSheet(workbook, context, month);
+                Sheet monthlySheet = resolveMonthlySheet(workbook, month, false);
+                Sheet attendanceSheet = resolveMonthlySheet(workbook, month, true);
+                writeMonthlySheet(monthlySheet, context, month);
+                writeAttendanceSheet(attendanceSheet, context, month);
             }
             workbook.write(outputStream);
             return outputStream.toByteArray();
@@ -102,9 +106,13 @@ public class CompanyWageExportService {
                 .le("start_date", endDate)
                 .and(wrapper -> wrapper.isNull("end_date").or().ge("end_date", startDate))
                 .orderByAsc("code");
-        Map<String, String> projectNameByCode = projectMapper.selectList(projectWrapper).stream()
+        List<Project> projects = projectMapper.selectList(projectWrapper);
+        Map<String, String> projectNameByCode = projects.stream()
                 .filter(item -> StringUtils.hasText(item.getCode()))
                 .collect(LinkedHashMap::new, (map, item) -> map.put(item.getCode(), item.getProjectName()), LinkedHashMap::putAll);
+        Map<Long, String> projectCodeById = projects.stream()
+                .filter(item -> StringUtils.hasText(item.getCode()))
+                .collect(LinkedHashMap::new, (map, item) -> map.put(item.getId(), item.getCode()), LinkedHashMap::putAll);
 
         QueryWrapper<AttendanceRecord> attendanceWrapper = new QueryWrapper<>();
         attendanceWrapper.eq("company_id", company.getId())
@@ -129,6 +137,7 @@ public class CompanyWageExportService {
         }
 
         Map<String, EmployeeAnnualRow> employees = buildEmployeeRows(attendanceRecords, monthlyDataList, projectNameByCode, months);
+        applyAttendanceAllocation(employees, attendanceRecords, monthlyDataList, projectCodeById, months);
         return ExportContext.builder()
                 .company(company)
                 .months(months)
@@ -186,6 +195,68 @@ public class CompanyWageExportService {
         return rows;
     }
 
+    private void applyAttendanceAllocation(Map<String, EmployeeAnnualRow> employees,
+                                           List<AttendanceRecord> attendanceRecords,
+                                           List<ProjectMonthlyData> monthlyDataList,
+                                           Map<Long, String> projectCodeById,
+                                           List<YearMonth> months) {
+        Map<String, BigDecimal> totalHoursByProjectMonth = new LinkedHashMap<>();
+        Map<String, BigDecimal> employeeHoursByProjectMonth = new LinkedHashMap<>();
+        for (AttendanceRecord record : attendanceRecords) {
+            String projectCode = record.getProjectCode();
+            if (!StringUtils.hasText(projectCode)) {
+                continue;
+            }
+            YearMonth month = YearMonth.from(record.getWorkDate());
+            String projectMonthKey = projectCode + "::" + month;
+            BigDecimal hours = safe(record.getDurationHours());
+            totalHoursByProjectMonth.merge(projectMonthKey, hours, BigDecimal::add);
+            String employeeKey = employeeKey(record.getEmployeeNo(), record.getEmployeeName(), projectCode);
+            String employeeMonthKey = employeeKey + "::" + month;
+            employeeHoursByProjectMonth.merge(employeeMonthKey, hours, BigDecimal::add);
+        }
+
+        Map<String, BigDecimal> laborTotalByProjectMonth = new LinkedHashMap<>();
+        for (ProjectMonthlyData monthlyData : monthlyDataList) {
+            String projectCode = projectCodeById.get(monthlyData.getProjectId());
+            if (!StringUtils.hasText(projectCode)) {
+                continue;
+            }
+            YearMonth month = YearMonth.from(monthlyData.getWorkMonth());
+            BigDecimal laborTotal = BigDecimal.valueOf(monthlyData.getLaborTotal() == null ? 0D : monthlyData.getLaborTotal());
+            laborTotalByProjectMonth.put(projectCode + "::" + month, laborTotal);
+        }
+
+        for (EmployeeAnnualRow row : employees.values()) {
+            for (YearMonth month : months) {
+                WageRow wage = row.getMonthlyWages().get(month);
+                if (wage == null) {
+                    continue;
+                }
+                if (wage.getSalary() != null && wage.getSalary().compareTo(BigDecimal.ZERO) > 0) {
+                    continue;
+                }
+                String projectMonthKey = row.getProjectCode() + "::" + month;
+                BigDecimal laborTotal = laborTotalByProjectMonth.get(projectMonthKey);
+                if (laborTotal == null || laborTotal.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                BigDecimal totalHours = totalHoursByProjectMonth.get(projectMonthKey);
+                if (totalHours == null || totalHours.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                String employeeMonthKey = employeeKey(row.getEmployeeNo(), row.getEmployeeName(), row.getProjectCode()) + "::" + month;
+                BigDecimal employeeHours = employeeHoursByProjectMonth.get(employeeMonthKey);
+                if (employeeHours == null || employeeHours.compareTo(BigDecimal.ZERO) <= 0) {
+                    continue;
+                }
+                BigDecimal allocated = laborTotal.multiply(employeeHours)
+                        .divide(totalHours, 2, RoundingMode.HALF_UP);
+                wage.setSalary(allocated);
+            }
+        }
+    }
+
     private List<WageRow> parseLaborRows(String costData) {
         List<WageRow> rows = new ArrayList<>();
         if (!StringUtils.hasText(costData)) {
@@ -205,7 +276,7 @@ public class CompanyWageExportService {
             }
             return rows;
         } catch (Exception ex) {
-            log.warn("解析工资导出 labor 数据失败，已跳过该月度记录");
+            log.warn("解析工资导出 labor 数据失败，已跳过该月记录");
             return rows;
         }
     }
@@ -246,75 +317,110 @@ public class CompanyWageExportService {
                 .build()));
     }
 
-    private void writeInstructionSheet(XSSFWorkbook workbook, ExportContext context) {
-        Sheet sheet = workbook.createSheet("说明");
-        CellStyle titleStyle = createTitleStyle(workbook);
-        CellStyle textStyle = createTextStyle(workbook);
-        writeCell(sheet.createRow(0), 0, "研发工资明细表导出说明", titleStyle);
-        writeCell(sheet.createRow(2), 0, "公司名称", textStyle);
-        writeCell(sheet.getRow(2), 1, context.getCompany().getName(), textStyle);
-        writeCell(sheet.createRow(3), 0, "导出范围", textStyle);
-        writeCell(sheet.getRow(3), 1, context.getMonths().get(0) + " 至 " + context.getMonths().get(context.getMonths().size() - 1), textStyle);
-        writeCell(sheet.createRow(4), 0, "说明", textStyle);
-        writeCell(sheet.getRow(4), 1, "本表根据系统中的打卡记录、月度费用和项目数据生成，用于研发工资审计测试。", textStyle);
-        sheet.setColumnWidth(0, 18 * 256);
-        sheet.setColumnWidth(1, 88 * 256);
+    private void writeInstructionSheet(Workbook workbook, ExportContext context) {
+        Sheet sheet = ExcelTemplateUtils.findSheetByNameContains(workbook, "说明");
+        if (sheet == null) {
+            return;
+        }
+        int rowIndex = ExcelTemplateUtils.findRowIndexByCellContains(sheet, "公司名称");
+        if (rowIndex >= 0) {
+            Row row = sheet.getRow(rowIndex);
+            if (row != null) {
+                setCellValue(row, row.getFirstCellNum() + 1, context.getCompany().getName(), null);
+            }
+        }
+        int rangeRow = ExcelTemplateUtils.findRowIndexByCellContains(sheet, "导出范围");
+        if (rangeRow >= 0) {
+            Row row = sheet.getRow(rangeRow);
+            if (row != null) {
+                String range = context.getMonths().get(0) + " 至 " + context.getMonths().get(context.getMonths().size() - 1);
+                setCellValue(row, row.getFirstCellNum() + 1, range, null);
+            }
+        }
     }
 
-    private void writeRosterSheet(XSSFWorkbook workbook, ExportContext context) {
-        Sheet sheet = workbook.createSheet("研发人员清单" + context.getEmployees().size());
-        CellStyle headerStyle = createHeaderStyle(workbook);
-        CellStyle textStyle = createTextStyle(workbook);
-        String[] headers = {"序号", "工号", "姓名", "项目号", "项目名称", "人员属性", "是否项目负责人", "参与月份"};
-        Row header = sheet.createRow(0);
-        for (int i = 0; i < headers.length; i++) {
-            writeCell(header, i, headers[i], headerStyle);
+    private void writeRosterSheet(Workbook workbook, ExportContext context) {
+        Sheet sheet = ExcelTemplateUtils.findSheetByNameContains(workbook, "人员清单");
+        if (sheet == null) {
+            sheet = ExcelTemplateUtils.findSheetByNameContains(workbook, "人员名单");
         }
-        int rowIndex = 1;
+        if (sheet == null) {
+            return;
+        }
+        int headerRowIndex = findHeaderRow(sheet);
+        if (headerRowIndex < 0) {
+            return;
+        }
+        Row headerRow = sheet.getRow(headerRowIndex);
+        int dataStartRow = headerRowIndex + 1;
+        int colSeq = findColumnIndexContains(headerRow, "序号", 0);
+        int colEmpNo = findColumnIndexContains(headerRow, "工号", 1);
+        int colName = findColumnIndexContains(headerRow, "姓名", 2);
+        int colProjectCode = findColumnIndexContains(headerRow, "项目号", 3);
+        int colProjectName = findColumnIndexContains(headerRow, "项目名", 4);
+        int colAttr = findColumnIndexContains(headerRow, "人员", 5);
+        int colManager = findColumnIndexContains(headerRow, "负责人", 6);
+        int colMonths = findColumnIndexContains(headerRow, "月份", 7);
+
+        clearDataRows(sheet, dataStartRow, colSeq);
+        Row styleRow = sheet.getRow(dataStartRow);
+
+        int rowIndex = dataStartRow;
+        int seq = 1;
         for (EmployeeAnnualRow rowData : sortedEmployees(context.getEmployees().values())) {
-            Row row = sheet.createRow(rowIndex);
-            writeCell(row, 0, rowIndex, textStyle);
-            writeCell(row, 1, rowData.getEmployeeNo(), textStyle);
-            writeCell(row, 2, rowData.getEmployeeName(), textStyle);
-            writeCell(row, 3, rowData.getProjectCode(), textStyle);
-            writeCell(row, 4, rowData.getProjectName(), textStyle);
-            writeCell(row, 5, rowData.getPersonnelAttribute(), textStyle);
-            writeCell(row, 6, rowData.isProjectManager() ? "是" : "否", textStyle);
-            writeCell(row, 7, joinMonths(rowData.getMonthlyHours().keySet()), textStyle);
-            rowIndex++;
+            Row row = ensureRow(sheet, rowIndex++, styleRow);
+            setCellValue(row, colSeq, seq++, cellFromRow(styleRow, colSeq));
+            setCellValue(row, colEmpNo, rowData.getEmployeeNo(), cellFromRow(styleRow, colEmpNo));
+            setCellValue(row, colName, rowData.getEmployeeName(), cellFromRow(styleRow, colName));
+            setCellValue(row, colProjectCode, rowData.getProjectCode(), cellFromRow(styleRow, colProjectCode));
+            setCellValue(row, colProjectName, rowData.getProjectName(), cellFromRow(styleRow, colProjectName));
+            setCellValue(row, colAttr, rowData.getPersonnelAttribute(), cellFromRow(styleRow, colAttr));
+            setCellValue(row, colManager, rowData.isProjectManager() ? "是" : "否", cellFromRow(styleRow, colManager));
+            setCellValue(row, colMonths, joinMonths(rowData.getMonthlyHours().keySet()), cellFromRow(styleRow, colMonths));
         }
-        autoSize(sheet, headers.length);
     }
 
-    private void writeSummarySheet(XSSFWorkbook workbook, ExportContext context) {
-        Sheet sheet = workbook.createSheet("汇总");
-        CellStyle headerStyle = createHeaderStyle(workbook);
-        CellStyle textStyle = createTextStyle(workbook);
-        Row header = sheet.createRow(0);
-        String[] baseHeaders = {"序号", "工号", "姓名", "项目号"};
-        int columnIndex = 0;
-        for (String value : baseHeaders) {
-            writeCell(header, columnIndex++, value, headerStyle);
+    private void writeSummarySheet(Workbook workbook, ExportContext context) {
+        Sheet sheet = ExcelTemplateUtils.findSheetByNameContains(workbook, "汇总");
+        if (sheet == null) {
+            return;
         }
+        int headerRowIndex = findHeaderRow(sheet);
+        if (headerRowIndex < 0) {
+            return;
+        }
+        Row headerRow = sheet.getRow(headerRowIndex);
+        int dataStartRow = headerRowIndex + 1;
+        int colSeq = findColumnIndexContains(headerRow, "序号", 0);
+        int colEmpNo = findColumnIndexContains(headerRow, "工号", 1);
+        int colName = findColumnIndexContains(headerRow, "姓名", 2);
+        int colProjectCode = findColumnIndexContains(headerRow, "项目号", 3);
+
+        Map<YearMonth, ColumnGroup> groupMap = new LinkedHashMap<>();
         for (YearMonth month : context.getMonths()) {
-            writeCell(header, columnIndex++, month.getMonthValue() + "月工资", headerStyle);
-            writeCell(header, columnIndex++, month.getMonthValue() + "月社保", headerStyle);
-            writeCell(header, columnIndex++, month.getMonthValue() + "月公积金", headerStyle);
-            writeCell(header, columnIndex++, month.getMonthValue() + "月研发工时", headerStyle);
+            ColumnGroup group = new ColumnGroup();
+            group.salary = findColumnIndexContains(headerRow, month.getMonthValue() + "月工资", -1);
+            group.social = findColumnIndexContains(headerRow, month.getMonthValue() + "月社保", -1);
+            group.fund = findColumnIndexContains(headerRow, month.getMonthValue() + "月公积金", -1);
+            group.hours = findColumnIndexContains(headerRow, month.getMonthValue() + "月研发工时", -1);
+            groupMap.put(month, group);
         }
-        writeCell(header, columnIndex++, "工资合计", headerStyle);
-        writeCell(header, columnIndex++, "社保合计", headerStyle);
-        writeCell(header, columnIndex++, "公积金合计", headerStyle);
-        writeCell(header, columnIndex, "研发工时合计", headerStyle);
+        int colSalaryTotal = findColumnIndexContains(headerRow, "工资合计", -1);
+        int colSocialTotal = findColumnIndexContains(headerRow, "社保合计", -1);
+        int colFundTotal = findColumnIndexContains(headerRow, "公积金合计", -1);
+        int colHoursTotal = findColumnIndexContains(headerRow, "研发工时合计", -1);
 
-        int rowIndex = 1;
+        clearDataRows(sheet, dataStartRow, colSeq);
+        Row styleRow = sheet.getRow(dataStartRow);
+        int rowIndex = dataStartRow;
+        int seq = 1;
         for (EmployeeAnnualRow rowData : sortedEmployees(context.getEmployees().values())) {
-            Row row = sheet.createRow(rowIndex);
-            int cellIndex = 0;
-            writeCell(row, cellIndex++, rowIndex, textStyle);
-            writeCell(row, cellIndex++, rowData.getEmployeeNo(), textStyle);
-            writeCell(row, cellIndex++, rowData.getEmployeeName(), textStyle);
-            writeCell(row, cellIndex++, rowData.getProjectCode(), textStyle);
+            Row row = ensureRow(sheet, rowIndex++, styleRow);
+            setCellValue(row, colSeq, seq++, cellFromRow(styleRow, colSeq));
+            setCellValue(row, colEmpNo, rowData.getEmployeeNo(), cellFromRow(styleRow, colEmpNo));
+            setCellValue(row, colName, rowData.getEmployeeName(), cellFromRow(styleRow, colName));
+            setCellValue(row, colProjectCode, rowData.getProjectCode(), cellFromRow(styleRow, colProjectCode));
+
             BigDecimal salaryTotal = BigDecimal.ZERO;
             BigDecimal socialTotal = BigDecimal.ZERO;
             BigDecimal fundTotal = BigDecimal.ZERO;
@@ -322,136 +428,209 @@ public class CompanyWageExportService {
             for (YearMonth month : context.getMonths()) {
                 WageRow wage = rowData.getMonthlyWages().get(month);
                 BigDecimal social = wage.socialTotal();
-                writeCell(row, cellIndex++, wage.getSalary().doubleValue(), textStyle);
-                writeCell(row, cellIndex++, social.doubleValue(), textStyle);
-                writeCell(row, cellIndex++, wage.getHousingFund().doubleValue(), textStyle);
-                writeCell(row, cellIndex++, safe(wage.getRdHours()).doubleValue(), textStyle);
+                ColumnGroup group = groupMap.get(month);
+                if (group.salary >= 0) {
+                    setNumericIfNotZero(row, group.salary, wage.getSalary(), cellFromRow(styleRow, group.salary));
+                }
+                if (group.social >= 0) {
+                    setNumericIfNotZero(row, group.social, social, cellFromRow(styleRow, group.social));
+                }
+                if (group.fund >= 0) {
+                    setNumericIfNotZero(row, group.fund, wage.getHousingFund(), cellFromRow(styleRow, group.fund));
+                }
+                if (group.hours >= 0) {
+                    setNumericIfNotZero(row, group.hours, safe(wage.getRdHours()), cellFromRow(styleRow, group.hours));
+                }
                 salaryTotal = salaryTotal.add(wage.getSalary());
                 socialTotal = socialTotal.add(social);
                 fundTotal = fundTotal.add(wage.getHousingFund());
                 hoursTotal = hoursTotal.add(safe(wage.getRdHours()));
             }
-            writeCell(row, cellIndex++, salaryTotal.doubleValue(), textStyle);
-            writeCell(row, cellIndex++, socialTotal.doubleValue(), textStyle);
-            writeCell(row, cellIndex++, fundTotal.doubleValue(), textStyle);
-            writeCell(row, cellIndex, hoursTotal.doubleValue(), textStyle);
-            rowIndex++;
+            if (colSalaryTotal >= 0) {
+                setNumericIfNotZero(row, colSalaryTotal, salaryTotal, cellFromRow(styleRow, colSalaryTotal));
+            }
+            if (colSocialTotal >= 0) {
+                setNumericIfNotZero(row, colSocialTotal, socialTotal, cellFromRow(styleRow, colSocialTotal));
+            }
+            if (colFundTotal >= 0) {
+                setNumericIfNotZero(row, colFundTotal, fundTotal, cellFromRow(styleRow, colFundTotal));
+            }
+            if (colHoursTotal >= 0) {
+                setNumericIfNotZero(row, colHoursTotal, hoursTotal, cellFromRow(styleRow, colHoursTotal));
+            }
         }
-        autoSize(sheet, columnIndex + 1);
     }
 
-    private void writeDiffSheet(XSSFWorkbook workbook, ExportContext context) {
-        Sheet sheet = workbook.createSheet("差异调整");
-        CellStyle headerStyle = createHeaderStyle(workbook);
-        CellStyle textStyle = createTextStyle(workbook);
-        String[] headers = {"序号", "工号", "姓名", "项目号", "计提工资", "实际工资", "差异", "说明"};
-        Row header = sheet.createRow(0);
-        for (int i = 0; i < headers.length; i++) {
-            writeCell(header, i, headers[i], headerStyle);
+    private void writeMonthlySheet(Sheet sheet, ExportContext context, YearMonth month) {
+        int headerRowIndex = findHeaderRow(sheet);
+        if (headerRowIndex < 0) {
+            return;
         }
-        int rowIndex = 1;
-        for (EmployeeAnnualRow rowData : sortedEmployees(context.getEmployees().values())) {
-            BigDecimal accrual = rowData.getMonthlyWages().values().stream().map(WageRow::getSalary).reduce(BigDecimal.ZERO, BigDecimal::add);
-            Row row = sheet.createRow(rowIndex);
-            writeCell(row, 0, rowIndex, textStyle);
-            writeCell(row, 1, rowData.getEmployeeNo(), textStyle);
-            writeCell(row, 2, rowData.getEmployeeName(), textStyle);
-            writeCell(row, 3, rowData.getProjectCode(), textStyle);
-            writeCell(row, 4, accrual.doubleValue(), textStyle);
-            writeCell(row, 5, accrual.doubleValue(), textStyle);
-            writeCell(row, 6, 0D, textStyle);
-            writeCell(row, 7, "当前测试数据未设置差异调整", textStyle);
-            rowIndex++;
-        }
-        autoSize(sheet, headers.length);
-    }
+        Row headerRow = sheet.getRow(headerRowIndex);
+        int dataStartRow = headerRowIndex + 1;
+        int colSeq = findColumnIndexContains(headerRow, "序号", 0);
+        int colEmpNo = findColumnIndexContains(headerRow, "工号", 1);
+        int colName = findColumnIndexContains(headerRow, "姓名", 2);
+        int colAttr = findColumnIndexContains(headerRow, "人员", 3);
+        int colProjectCode = findColumnIndexContains(headerRow, "项目号", 4);
+        int colManager = findColumnIndexContains(headerRow, "负责人", 5);
+        int colSalary = findColumnIndexContains(headerRow, "应发工资", -1);
+        int colPension = findColumnIndexContains(headerRow, "养老保险", -1);
+        int colUnemployment = findColumnIndexContains(headerRow, "失业保险", -1);
+        int colMedical = findColumnIndexContains(headerRow, "医疗保险", -1);
+        int colMaternity = findColumnIndexContains(headerRow, "生育保险", -1);
+        int colInjury = findColumnIndexContains(headerRow, "工伤保险", -1);
+        int colFund = findColumnIndexContains(headerRow, "公积金", -1);
+        int colTotalHours = findColumnIndexContains(headerRow, "总工时", -1);
+        int colRdHours = findColumnIndexContains(headerRow, "研发工时", -1);
+        int colRdSalary = findColumnIndexContains(headerRow, "研发工资", -1);
 
-    private void writeMonthlySheet(XSSFWorkbook workbook, ExportContext context, YearMonth month) {
-        Sheet sheet = workbook.createSheet(month.getMonthValue() + "月");
-        CellStyle headerStyle = createHeaderStyle(workbook);
-        CellStyle textStyle = createTextStyle(workbook);
-        String[] headers = {
-                "序号", "工号", "姓名", "人员属性", "项目号", "是否项目负责人",
-                "应发工资", "公司承担养老保险", "公司承担失业保险", "公司承担医疗保险",
-                "公司承担生育保险", "公司承担工伤保险", "公司承担住房公积金",
-                "总工时", "研发工时", "研发工资", "养老保险", "失业保险", "医疗保险", "生育保险", "工伤保险", "住房公积金"
-        };
-        Row header = sheet.createRow(0);
-        for (int i = 0; i < headers.length; i++) {
-            writeCell(header, i, headers[i], headerStyle);
-        }
-        int rowIndex = 1;
+        clearDataRows(sheet, dataStartRow, colSeq);
+        Row styleRow = sheet.getRow(dataStartRow);
+        int rowIndex = dataStartRow;
+        int seq = 1;
         for (EmployeeAnnualRow rowData : sortedEmployees(context.getEmployees().values())) {
             WageRow wage = rowData.getMonthlyWages().get(month);
-            Row row = sheet.createRow(rowIndex);
-            int cellIndex = 0;
-            writeCell(row, cellIndex++, rowIndex, textStyle);
-            writeCell(row, cellIndex++, rowData.getEmployeeNo(), textStyle);
-            writeCell(row, cellIndex++, rowData.getEmployeeName(), textStyle);
-            writeCell(row, cellIndex++, rowData.getPersonnelAttribute(), textStyle);
-            writeCell(row, cellIndex++, rowData.getProjectCode(), textStyle);
-            writeCell(row, cellIndex++, rowData.isProjectManager() ? "是" : "否", textStyle);
-            writeCell(row, cellIndex++, wage.getSalary().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getPension().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getUnemployment().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getMedical().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getMaternity().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getInjury().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getHousingFund().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, safe(wage.getTotalHours()).doubleValue(), textStyle);
-            writeCell(row, cellIndex++, safe(wage.getRdHours()).doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getSalary().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getPension().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getUnemployment().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getMedical().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getMaternity().doubleValue(), textStyle);
-            writeCell(row, cellIndex++, wage.getInjury().doubleValue(), textStyle);
-            writeCell(row, cellIndex, wage.getHousingFund().doubleValue(), textStyle);
-            rowIndex++;
+            Row row = ensureRow(sheet, rowIndex++, styleRow);
+            setCellValue(row, colSeq, seq++, cellFromRow(styleRow, colSeq));
+            setCellValue(row, colEmpNo, rowData.getEmployeeNo(), cellFromRow(styleRow, colEmpNo));
+            setCellValue(row, colName, rowData.getEmployeeName(), cellFromRow(styleRow, colName));
+            setCellValue(row, colAttr, rowData.getPersonnelAttribute(), cellFromRow(styleRow, colAttr));
+            setCellValue(row, colProjectCode, rowData.getProjectCode(), cellFromRow(styleRow, colProjectCode));
+            if (colManager >= 0) {
+                setCellValue(row, colManager, rowData.isProjectManager() ? "是" : "否", cellFromRow(styleRow, colManager));
+            }
+            if (colSalary >= 0) {
+                setCellValue(row, colSalary, wage.getSalary(), cellFromRow(styleRow, colSalary));
+            }
+            if (colPension >= 0) {
+                setCellValue(row, colPension, wage.getPension(), cellFromRow(styleRow, colPension));
+            }
+            if (colUnemployment >= 0) {
+                setCellValue(row, colUnemployment, wage.getUnemployment(), cellFromRow(styleRow, colUnemployment));
+            }
+            if (colMedical >= 0) {
+                setCellValue(row, colMedical, wage.getMedical(), cellFromRow(styleRow, colMedical));
+            }
+            if (colMaternity >= 0) {
+                setCellValue(row, colMaternity, wage.getMaternity(), cellFromRow(styleRow, colMaternity));
+            }
+            if (colInjury >= 0) {
+                setCellValue(row, colInjury, wage.getInjury(), cellFromRow(styleRow, colInjury));
+            }
+            if (colFund >= 0) {
+                setCellValue(row, colFund, wage.getHousingFund(), cellFromRow(styleRow, colFund));
+            }
+            if (colTotalHours >= 0) {
+                setCellValue(row, colTotalHours, safe(wage.getTotalHours()), cellFromRow(styleRow, colTotalHours));
+            }
+            if (colRdHours >= 0) {
+                setCellValue(row, colRdHours, safe(wage.getRdHours()), cellFromRow(styleRow, colRdHours));
+            }
+            if (colRdSalary >= 0) {
+                setCellValue(row, colRdSalary, wage.getSalary(), cellFromRow(styleRow, colRdSalary));
+            }
         }
-        autoSize(sheet, headers.length);
     }
 
-    private void writeAttendanceSheet(XSSFWorkbook workbook, ExportContext context, YearMonth month) {
-        Sheet sheet = workbook.createSheet(month.getMonthValue() + "月考勤");
-        CellStyle headerStyle = createHeaderStyle(workbook);
-        CellStyle textStyle = createTextStyle(workbook);
-        Row header = sheet.createRow(0);
-        int cellIndex = 0;
-        writeCell(header, cellIndex++, "序号", headerStyle);
-        writeCell(header, cellIndex++, "工号", headerStyle);
-        writeCell(header, cellIndex++, "姓名", headerStyle);
-        writeCell(header, cellIndex++, "项目号", headerStyle);
-        int days = month.lengthOfMonth();
-        for (int day = 1; day <= days; day++) {
-            writeCell(header, cellIndex++, day, headerStyle);
+    private void writeAttendanceSheet(Sheet sheet, ExportContext context, YearMonth month) {
+        updateAttendanceTitle(sheet, context, month);
+        int headerRowIndex = findHeaderRow(sheet);
+        if (headerRowIndex < 0) {
+            return;
         }
-        writeCell(header, cellIndex, "合计(小时)", headerStyle);
+        Row headerRow = sheet.getRow(headerRowIndex);
+        int dataStartRow = headerRowIndex + 1;
+        int colSeq = findColumnIndexContains(headerRow, "序号", 0);
+        int colEmpNo = findColumnIndexContains(headerRow, "工号", 1);
+        int colName = findColumnIndexContains(headerRow, "姓名", 2);
+        int colProjectCode = findColumnIndexContains(headerRow, "项目号", 3);
+        int colAttendanceDays = findColumnIndexContains(headerRow, "实际出勤", -1);
+        int colTotalHours = findColumnIndexContains(headerRow, "总工时", -1);
+        int colRdDays = findColumnIndexContains(headerRow, "研发天数", -1);
+        int totalCol = findColumnIndexContains(headerRow, "合计", -1);
 
+        int days = month.lengthOfMonth();
+        List<Integer> dayCols = new ArrayList<>();
+        for (Cell cell : headerRow) {
+            String value = ExcelTemplateUtils.getCellString(cell);
+            Integer day = parseDayHeader(value);
+            if (day != null && day >= 1 && day <= 31) {
+                dayCols.add(cell.getColumnIndex());
+            }
+        }
+        dayCols.sort(Integer::compareTo);
+        if (dayCols.size() > days) {
+            dayCols = dayCols.subList(0, days);
+        }
+
+        clearDataRows(sheet, dataStartRow, colSeq);
+        Row styleRow = sheet.getRow(dataStartRow);
         Map<String, Map<Integer, BigDecimal>> dailyMap = buildAttendanceMap(context.getAttendanceRecords(), month);
-        int rowIndex = 1;
+        int rowIndex = dataStartRow;
+        int seq = 1;
         for (EmployeeAnnualRow rowData : sortedEmployees(context.getEmployees().values())) {
-            Row row = sheet.createRow(rowIndex);
-            int colIndex = 0;
-            writeCell(row, colIndex++, rowIndex, textStyle);
-            writeCell(row, colIndex++, rowData.getEmployeeNo(), textStyle);
-            writeCell(row, colIndex++, rowData.getEmployeeName(), textStyle);
-            writeCell(row, colIndex++, rowData.getProjectCode(), textStyle);
+            Row row = ensureRow(sheet, rowIndex++, styleRow);
+            setCellValue(row, colSeq, seq++, cellFromRow(styleRow, colSeq));
+            setCellValue(row, colEmpNo, rowData.getEmployeeNo(), cellFromRow(styleRow, colEmpNo));
+            setCellValue(row, colName, rowData.getEmployeeName(), cellFromRow(styleRow, colName));
+            setCellValue(row, colProjectCode, rowData.getProjectCode(), cellFromRow(styleRow, colProjectCode));
             String key = employeeKey(rowData.getEmployeeNo(), rowData.getEmployeeName(), rowData.getProjectCode());
             Map<Integer, BigDecimal> dailyHours = dailyMap.getOrDefault(key, Map.of());
             BigDecimal total = BigDecimal.ZERO;
-            for (int day = 1; day <= days; day++) {
+            int dayCount = 0;
+            for (int i = 0; i < dayCols.size(); i++) {
+                int day = i + 1;
                 BigDecimal value = dailyHours.get(day);
                 total = total.add(safe(value));
-                writeCell(row, colIndex++, value == null ? "-" : value.stripTrailingZeros().toPlainString(), textStyle);
+                if (value != null && value.compareTo(BigDecimal.ZERO) > 0) {
+                    dayCount++;
+                }
+                setCellValue(row, dayCols.get(i), value == null ? "-" : value.stripTrailingZeros().toPlainString(), cellFromRow(styleRow, dayCols.get(i)));
             }
-            writeCell(row, colIndex, total.doubleValue(), textStyle);
-            rowIndex++;
+            if (colAttendanceDays >= 0) {
+                setCellValue(row, colAttendanceDays, dayCount, cellFromRow(styleRow, colAttendanceDays));
+            }
+            if (colTotalHours >= 0) {
+                setCellValue(row, colTotalHours, total, cellFromRow(styleRow, colTotalHours));
+            }
+            if (colRdDays >= 0) {
+                setCellValue(row, colRdDays, dayCount, cellFromRow(styleRow, colRdDays));
+            }
+            if (totalCol >= 0) {
+                setCellValue(row, totalCol, total, cellFromRow(styleRow, totalCol));
+            }
         }
-        sheet.createFreezePane(4, 1);
-        for (int i = 0; i < 4 + days + 1; i++) {
-            sheet.setColumnWidth(i, i < 4 ? 14 * 256 : 5 * 256);
+    }
+
+    private Sheet resolveMonthlySheet(Workbook workbook, YearMonth month, boolean attendance) {
+        String sheetName = month.getMonthValue() + "月" + (attendance ? "考勤" : "");
+        Sheet existing = workbook.getSheet(sheetName);
+        if (existing != null) {
+            return existing;
         }
+        Sheet template = findTemplateMonthSheet(workbook, attendance);
+        if (template == null) {
+            return workbook.createSheet(sheetName);
+        }
+        return ExcelTemplateUtils.cloneSheet(workbook, template, sheetName);
+    }
+
+    private Sheet findTemplateMonthSheet(Workbook workbook, boolean attendance) {
+        for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
+            Sheet sheet = workbook.getSheetAt(i);
+            String name = sheet.getSheetName();
+            if (attendance) {
+                if (name.contains("考勤")) {
+                    return sheet;
+                }
+            } else {
+                if (name.matches("\\d+月") && !name.contains("考勤")) {
+                    return sheet;
+                }
+            }
+        }
+        return null;
     }
 
     private Map<String, Map<Integer, BigDecimal>> buildAttendanceMap(List<AttendanceRecord> attendanceRecords, YearMonth month) {
@@ -487,7 +666,19 @@ public class CompanyWageExportService {
     }
 
     private String employeeKey(String employeeNo, String employeeName, String projectCode) {
-        return (employeeNo == null ? "" : employeeNo) + "::" + (employeeName == null ? "" : employeeName) + "::" + (projectCode == null ? "" : projectCode);
+        String normalizedNo = normalizeKeyPart(employeeNo);
+        String normalizedProject = normalizeKeyPart(projectCode);
+        if (StringUtils.hasText(normalizedNo) || StringUtils.hasText(normalizedProject)) {
+            return normalizedNo + "::" + normalizedProject;
+        }
+        return normalizeKeyPart(employeeName);
+    }
+
+    private String normalizeKeyPart(String value) {
+        if (!StringUtils.hasText(value)) {
+            return "";
+        }
+        return value.trim().toUpperCase();
     }
 
     private String joinMonths(Collection<YearMonth> months) {
@@ -513,49 +704,194 @@ public class CompanyWageExportService {
                 .toList();
     }
 
-    private CellStyle createTitleStyle(XSSFWorkbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        style.setAlignment(HorizontalAlignment.LEFT);
-        style.setVerticalAlignment(VerticalAlignment.CENTER);
-        return style;
+    private int findHeaderRow(Sheet sheet) {
+        int headerRowIndex = ExcelTemplateUtils.findRowIndexByCellValue(sheet, "序号");
+        if (headerRowIndex >= 0) {
+            return headerRowIndex;
+        }
+        return ExcelTemplateUtils.findRowIndexByCellContains(sheet, "序号");
     }
 
-    private CellStyle createHeaderStyle(XSSFWorkbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        style.setAlignment(HorizontalAlignment.CENTER);
-        style.setVerticalAlignment(VerticalAlignment.CENTER);
-        style.setBorderTop(BorderStyle.THIN);
-        style.setBorderBottom(BorderStyle.THIN);
-        style.setBorderLeft(BorderStyle.THIN);
-        style.setBorderRight(BorderStyle.THIN);
-        return style;
+    private int findColumnIndexContains(Row row, String keyword, int fallback) {
+        if (row == null) {
+            return fallback;
+        }
+        for (Cell cell : row) {
+            String value = ExcelTemplateUtils.getCellString(cell);
+            if (value != null && value.contains(keyword)) {
+                return cell.getColumnIndex();
+            }
+        }
+        return fallback;
     }
 
-    private CellStyle createTextStyle(XSSFWorkbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        style.setAlignment(HorizontalAlignment.CENTER);
-        style.setVerticalAlignment(VerticalAlignment.CENTER);
-        style.setBorderTop(BorderStyle.THIN);
-        style.setBorderBottom(BorderStyle.THIN);
-        style.setBorderLeft(BorderStyle.THIN);
-        style.setBorderRight(BorderStyle.THIN);
-        return style;
+    private void clearDataRows(Sheet sheet, int startRow, int seqCol) {
+        int lastRow = sheet.getLastRowNum();
+        for (int i = startRow; i <= lastRow; i++) {
+            Row row = sheet.getRow(i);
+            if (row == null) {
+                continue;
+            }
+            if (seqCol >= 0) {
+                Cell cell = row.getCell(seqCol);
+                if (cell == null || ExcelTemplateUtils.getCellString(cell) == null) {
+                    continue;
+                }
+            }
+            for (Cell cell : row) {
+                if (cell != null) {
+                    cell.setBlank();
+                }
+            }
+        }
     }
 
-    private void writeCell(Row row, int columnIndex, Object value, CellStyle style) {
-        Cell cell = row.createCell(columnIndex);
+    private Row ensureRow(Sheet sheet, int rowIndex, Row styleRow) {
+        Row row = sheet.getRow(rowIndex);
+        if (row == null) {
+            row = sheet.createRow(rowIndex);
+        }
+        if (styleRow != null) {
+            for (Cell templateCell : styleRow) {
+                int col = templateCell.getColumnIndex();
+                Cell cell = row.getCell(col);
+                if (cell == null) {
+                    cell = row.createCell(col);
+                }
+                CellStyle style = templateCell.getCellStyle();
+                if (style != null) {
+                    cell.setCellStyle(style);
+                }
+            }
+        }
+        return row;
+    }
+
+    private void setCellValue(Row row, int columnIndex, Object value, Cell templateCell) {
+        if (row == null || columnIndex < 0) {
+            return;
+        }
+        Cell cell = row.getCell(columnIndex);
+        if (cell == null) {
+            cell = row.createCell(columnIndex);
+        }
+        if (templateCell != null) {
+            CellStyle style = templateCell.getCellStyle();
+            if (style != null) {
+                cell.setCellStyle(style);
+            }
+        }
+        if (value == null) {
+            cell.setBlank();
+            return;
+        }
         if (value instanceof Number number) {
             cell.setCellValue(number.doubleValue());
         } else {
-            cell.setCellValue(value == null ? "" : String.valueOf(value));
+            cell.setCellValue(String.valueOf(value));
         }
-        cell.setCellStyle(style);
     }
 
-    private void autoSize(Sheet sheet, int columnCount) {
-        for (int i = 0; i < columnCount; i++) {
-            sheet.autoSizeColumn(i);
-            sheet.setColumnWidth(i, Math.min(sheet.getColumnWidth(i) + 512, 40 * 256));
+    private void setNumericIfNotZero(Row row, int columnIndex, BigDecimal value, Cell templateCell) {
+        if (value == null || value.compareTo(BigDecimal.ZERO) == 0) {
+            setCellValue(row, columnIndex, null, templateCell);
+            return;
+        }
+        setCellValue(row, columnIndex, value, templateCell);
+    }
+
+    private void removeSheetByNameContains(Workbook workbook, String keyword) {
+        for (int i = workbook.getNumberOfSheets() - 1; i >= 0; i--) {
+            Sheet sheet = workbook.getSheetAt(i);
+            if (sheet.getSheetName() != null && sheet.getSheetName().contains(keyword)) {
+                workbook.removeSheetAt(i);
+            }
+        }
+    }
+
+    private void pruneMonthSheets(Workbook workbook, List<YearMonth> months) {
+        List<Integer> keepMonths = months.stream().map(YearMonth::getMonthValue).toList();
+        for (int i = workbook.getNumberOfSheets() - 1; i >= 0; i--) {
+            Sheet sheet = workbook.getSheetAt(i);
+            String name = sheet.getSheetName();
+            Integer monthValue = extractMonth(name);
+            if (monthValue == null) {
+                continue;
+            }
+            if (!keepMonths.contains(monthValue)) {
+                workbook.removeSheetAt(i);
+            }
+        }
+    }
+
+    private Integer extractMonth(String sheetName) {
+        if (sheetName == null || !sheetName.contains("月")) {
+            return null;
+        }
+        String digits = sheetName.replaceAll("[^0-9]", "");
+        if (digits.isBlank()) {
+            return null;
+        }
+        try {
+            int value = Integer.parseInt(digits);
+            return value >= 1 && value <= 12 ? value : null;
+        } catch (NumberFormatException ex) {
+            return null;
+        }
+    }
+
+    private Cell cellFromRow(Row row, int columnIndex) {
+        if (row == null || columnIndex < 0) {
+            return null;
+        }
+        return row.getCell(columnIndex);
+    }
+
+    private Integer parseDayHeader(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        String trimmed = value.trim();
+        try {
+            return Integer.parseInt(trimmed);
+        } catch (NumberFormatException ignore) {
+            // continue
+        }
+        try {
+            double numeric = Double.parseDouble(trimmed);
+            int day = (int) Math.round(numeric);
+            if (Math.abs(numeric - day) < 0.0001d) {
+                return day;
+            }
+        } catch (NumberFormatException ignore) {
+            // ignore
+        }
+        return null;
+    }
+
+    private void updateAttendanceTitle(Sheet sheet, ExportContext context, YearMonth month) {
+        if (sheet == null || context == null || context.getCompany() == null) {
+            return;
+        }
+        int titleRowIndex = ExcelTemplateUtils.findRowIndexByCellContains(sheet, "\u5de5\u65f6\u8bb0\u5f55\u8868");
+        if (titleRowIndex < 0) {
+            return;
+        }
+        Row row = sheet.getRow(titleRowIndex);
+        if (row == null) {
+            return;
+        }
+        String companyName = context.getCompany().getName();
+        if (!StringUtils.hasText(companyName)) {
+            return;
+        }
+        String title = companyName + month.getYear() + "\u5e74" + month.getMonthValue() + "\u6708\u7814\u53d1\u4eba\u5458\u5de5\u65f6\u8bb0\u5f55\u8868";
+        for (Cell cell : row) {
+            String value = ExcelTemplateUtils.getCellString(cell);
+            if (value != null && value.contains("\u5de5\u65f6\u8bb0\u5f55\u8868")) {
+                setCellValue(row, cell.getColumnIndex(), title, cell);
+                return;
+            }
         }
     }
 
@@ -629,5 +965,12 @@ public class CompanyWageExportService {
         private static BigDecimal value(BigDecimal input) {
             return input == null ? BigDecimal.ZERO : input;
         }
+    }
+
+    private static class ColumnGroup {
+        private int salary = -1;
+        private int social = -1;
+        private int fund = -1;
+        private int hours = -1;
     }
 }

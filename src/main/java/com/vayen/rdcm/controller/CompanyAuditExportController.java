@@ -45,10 +45,10 @@ public class CompanyAuditExportController {
                 YearMonth.parse(endMonth),
                 currentUser
         );
-        String fileName = "附件二-研发工资明细表-" + startMonth + "-" + endMonth + ".xlsx";
+        String fileName = "附件二-研发工资明细表-" + startMonth + "-" + endMonth + ".xls";
         String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8);
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentType(MediaType.parseMediaType("application/vnd.ms-excel"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
                 .body(new ByteArrayResource(bytes));
     }
