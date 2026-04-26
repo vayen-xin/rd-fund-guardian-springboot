@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vayen.rdcm.entity.Project;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
 import com.vayen.rdcm.mapper.ProjectMonthlyDataMapper;
+import com.vayen.rdcm.security.CurrentUser;
+import com.vayen.rdcm.security.RoleConstants;
 import com.vayen.rdcm.service.ProjectMonthlyDataService;
 import com.vayen.rdcm.service.ProjectService;
 import com.vayen.rdcm.util.JsonUtils;
@@ -45,7 +47,7 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void saveMonthlyData(Long projectId, LocalDate workMonth, String costData,
-                                String employeeData, String deviceData, Double grandTotal, Long createdBy) {
+                                String employeeData, String deviceData, Double grandTotal, CurrentUser currentUser) {
         ProjectMonthlyData monthlyData = getProjectMonthlyData(projectId, workMonth);
         if (monthlyData == null) {
             Project project = projectService.getProjectRecord(projectId);
@@ -53,8 +55,10 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
             monthlyData.setCompanyId(project.getCompanyId());
             monthlyData.setProjectId(projectId);
             monthlyData.setWorkMonth(toStartOfMonth(workMonth));
-            monthlyData.setCreatedBy(createdBy);
+            monthlyData.setCreatedBy(currentUser.getId());
             monthlyData.setCreatedAt(LocalDateTime.now());
+        } else if ("settled".equals(monthlyData.getStatus()) && !canEditSettledMonthlyData(currentUser)) {
+            throw new IllegalArgumentException("已结算的月度数据仅允许管理员修改");
         }
 
         double safeGrandTotal = grandTotal == null ? 0.0 : grandTotal;
@@ -76,7 +80,7 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         monthlyData.setDirectMaterialTotal(parsed.getCategoryTotal("direct"));
         monthlyData.setDirectFuelTotal(0.0);
         monthlyData.setDirectRentalTotal(0.0);
-        monthlyData.setDepreciationTotal(parsed.getCategoryTotal("deprec"));
+        monthlyData.setDepreciationTotal(parsed.getCategoryTotal("deprec") + parsed.getCategoryTotal("long_deferred"));
         monthlyData.setAmortizationTotal(parsed.getCategoryTotal("intangible"));
         monthlyData.setDesignTotal(parsed.getCategoryTotal("design"));
         monthlyData.setCommissioningTotal(parsed.getCategoryTotal("equip"));
@@ -86,6 +90,11 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
         monthlyData.setVersion(monthlyData.getVersion() == null ? 1 : monthlyData.getVersion() + 1);
 
         this.saveOrUpdate(monthlyData);
+    }
+
+    private boolean canEditSettledMonthlyData(CurrentUser currentUser) {
+        String role = RoleConstants.normalize(currentUser.getRole());
+        return RoleConstants.ADMIN.equals(role) || RoleConstants.BRANCH_ADMIN.equals(role);
     }
 
     @Override

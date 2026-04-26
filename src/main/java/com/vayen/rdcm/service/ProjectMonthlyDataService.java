@@ -2,6 +2,7 @@ package com.vayen.rdcm.service;
 
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.vayen.rdcm.entity.ProjectMonthlyData;
+import com.vayen.rdcm.security.CurrentUser;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -14,7 +15,7 @@ public interface ProjectMonthlyDataService extends IService<ProjectMonthlyData> 
     ProjectMonthlyData getProjectMonthlyData(Long projectId, LocalDate workMonth);
 
     void saveMonthlyData(Long projectId, LocalDate workMonth, String costData,
-                         String employeeData, String deviceData, Double grandTotal, Long createdBy);
+                         String employeeData, String deviceData, Double grandTotal, CurrentUser currentUser);
 
     void submitMonthlyData(Long projectId, LocalDate workMonth, Long operatorId);
 
