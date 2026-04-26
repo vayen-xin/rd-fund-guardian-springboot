@@ -76,7 +76,7 @@ public class ProjectMonthlyDataController {
                 request.getEmployeeData(),
                 request.getDeviceData(),
                 request.getGrandTotal(),
-                currentUserService.getCurrentUserId()
+                currentUserService.getCurrentUser()
         );
         return Result.success();
     }
