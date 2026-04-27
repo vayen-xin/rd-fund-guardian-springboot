@@ -80,8 +80,10 @@ public class SettlementController {
             @PathVariable Long projectId,
             @RequestParam(required = false) String month) {
         projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
+        Project project = projectService.getProjectRecord(projectId);
         QueryWrapper<ProjectSettlement> wrapper = new QueryWrapper<>();
-        wrapper.eq("project_id", projectId);
+        wrapper.eq("project_id", projectId)
+                .eq("company_id", project.getCompanyId());
         if (month != null && !month.isBlank()) {
             wrapper.eq("settlement_month", parseMonth(month).atTime(0, 0, 0));
         }

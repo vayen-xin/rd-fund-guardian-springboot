@@ -177,3 +177,10 @@ app:
 - 小伙伴联调测试
 - 老师演示查看
 - 收集甲方反馈前的内部试运行
+## Update 2026-04-27 (Tenant Security Hardening)
+
+- Added tenant isolation checks for project-employee and project-equipment relations.
+- Added `company_id` constraints to settlement and export query paths to prevent cross-tenant reads.
+- Hardened project settlement lookup/update flow with explicit `project_id + company_id + month` matching.
+- Added/updated SQL migration scripts for `project_equipment.company_id` backfill and tenant-safe indexes.
+- Verified compile pass with JDK17 (`mvnw -DskipTests compile`).

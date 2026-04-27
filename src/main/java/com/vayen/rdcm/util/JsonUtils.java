@@ -22,6 +22,7 @@ public class JsonUtils {
             "direct_fuel", "direct",
             "direct_rental", "direct",
             "depreciation", "deprec",
+            "long_deferred", "long_deferred",
             "amortization", "intangible",
             "commissioning", "equip",
             "outsourced", "outsource"
@@ -66,6 +67,15 @@ public class JsonUtils {
 
     public static double calculateGrandTotal(String json) {
         return parseCostData(json).calculateTotal();
+    }
+
+    public static String normalizeCostDataJson(String json) {
+        try {
+            return MAPPER.writeValueAsString(toFrontendShape(parseCostData(json).getData()));
+        } catch (JsonProcessingException e) {
+            log.error("标准化费用 JSON 失败: {}", json, e);
+            throw new RuntimeException("费用 JSON 标准化失败", e);
+        }
     }
 
     /**
@@ -123,15 +133,14 @@ public class JsonUtils {
      */
     private static Map<String, List<Map<String, Object>>> normalizeFrontendShape(Map<String, Object> root) {
         Map<String, List<Map<String, Object>>> normalized = emptyData();
-        for (String category : MonthlyFeeCatalog.categoryCodes()) {
-            Object categoryObj = root.get(category);
+        for (Map.Entry<String, Object> entry : root.entrySet()) {
+            String rawCategoryCode = entry.getKey();
+            Object categoryObj = entry.getValue();
             if (!(categoryObj instanceof Map<?, ?> categoryMap)) {
                 continue;
             }
-            List<Map<String, Object>> merged = new ArrayList<>();
-            merged.addAll(copyItems(category, categoryMap.get("systemItems"), "system"));
-            merged.addAll(copyItems(category, categoryMap.get("manualItems"), "manual"));
-            normalized.put(category, merged);
+            mergeItems(normalized, copyItems(rawCategoryCode, categoryMap.get("systemItems"), "system"));
+            mergeItems(normalized, copyItems(rawCategoryCode, categoryMap.get("manualItems"), "manual"));
         }
         return normalized;
     }
@@ -143,13 +152,12 @@ public class JsonUtils {
         Map<String, List<Map<String, Object>>> normalized = emptyData();
         for (Map.Entry<String, Object> entry : root.entrySet()) {
             String category = LEGACY_CATEGORY_MAPPING.getOrDefault(entry.getKey(), entry.getKey());
-            List<Map<String, Object>> items = copyItems(category, entry.getValue(), "legacy");
-            normalized.computeIfAbsent(category, key -> new ArrayList<>()).addAll(items);
+            mergeItems(normalized, copyItems(category, entry.getValue(), "legacy"));
         }
         return normalized;
     }
 
-    private static List<Map<String, Object>> copyItems(String categoryCode, Object rawItems, String sourceType) {
+    private static List<Map<String, Object>> copyItems(String rawCategoryCode, Object rawItems, String sourceType) {
         List<Map<String, Object>> copied = new ArrayList<>();
         if (!(rawItems instanceof List<?> list)) {
             return copied;
@@ -158,12 +166,20 @@ public class JsonUtils {
             if (item instanceof Map<?, ?> itemMap) {
                 Map<String, Object> copiedItem = new LinkedHashMap<>();
                 itemMap.forEach((key, value) -> copiedItem.put(String.valueOf(key), value));
+                String rawItemCode = copiedItem.get("itemCode") instanceof String value ? value : "";
+                String rawItemLabel = copiedItem.get("itemLabel") instanceof String value ? value
+                        : copiedItem.get("label") instanceof String value ? value
+                        : copiedItem.get("name") instanceof String value ? value
+                        : "";
+                String categoryCode = MonthlyFeeCatalog.resolveCategoryCode(rawCategoryCode, rawItemCode, rawItemLabel);
+                String itemCode = MonthlyFeeCatalog.resolveItemCode(categoryCode, rawItemCode, rawItemLabel);
                 copiedItem.putIfAbsent("sourceType", sourceType);
-                copiedItem.putIfAbsent("categoryCode", categoryCode);
-                copiedItem.putIfAbsent("categoryLabel", MonthlyFeeCatalog.categoryLabel(categoryCode));
-                Object itemCode = copiedItem.get("itemCode");
-                if (itemCode instanceof String code && !code.isBlank()) {
-                    copiedItem.putIfAbsent("itemLabel", MonthlyFeeCatalog.itemLabel(categoryCode, code));
+                copiedItem.put("categoryCode", categoryCode);
+                copiedItem.put("categoryLabel", MonthlyFeeCatalog.categoryLabel(categoryCode));
+                if (!itemCode.isBlank()) {
+                    copiedItem.put("itemCode", itemCode);
+                    copiedItem.put("itemLabel", MonthlyFeeCatalog.itemLabel(categoryCode, itemCode));
+                    copiedItem.put("label", MonthlyFeeCatalog.itemLabel(categoryCode, itemCode));
                 }
                 if (!copiedItem.containsKey("label") && copiedItem.get("itemLabel") instanceof String itemLabel) {
                     copiedItem.put("label", itemLabel);
@@ -172,6 +188,13 @@ public class JsonUtils {
             }
         }
         return copied;
+    }
+
+    private static void mergeItems(Map<String, List<Map<String, Object>>> normalized, List<Map<String, Object>> items) {
+        for (Map<String, Object> item : items) {
+            String categoryCode = String.valueOf(item.getOrDefault("categoryCode", ""));
+            normalized.computeIfAbsent(categoryCode, key -> new ArrayList<>()).add(item);
+        }
     }
 
     private static Map<String, List<Map<String, Object>>> emptyData() {

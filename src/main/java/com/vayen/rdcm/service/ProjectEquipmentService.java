@@ -18,4 +18,9 @@ public interface ProjectEquipmentService extends IService<ProjectEquipment> {
      * 按设备 ID 列表重建项目设备关联
      */
     void replaceProjectEquipments(Long projectId, List<Long> deviceIds);
+
+    /**
+     * 仅删除当前项目下的设备关联，避免按主键直接删除造成越权操作。
+     */
+    boolean removeByProjectAndId(Long projectId, Long relationId);
 }

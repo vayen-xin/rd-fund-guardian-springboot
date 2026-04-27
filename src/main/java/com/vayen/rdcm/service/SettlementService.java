@@ -5,8 +5,8 @@ import com.vayen.rdcm.entity.ProjectMonthlyData;
 import com.vayen.rdcm.entity.ProjectSettlement;
 import com.vayen.rdcm.mapper.ProjectSettlementMapper;
 import com.vayen.rdcm.util.JsonUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,16 +21,14 @@ import java.util.Map;
  */
 @Service
 @Slf4j
+@RequiredArgsConstructor
 public class SettlementService {
 
     private static final BigDecimal OTHER_COST_RATIO_LIMIT = BigDecimal.valueOf(0.20);
     private static final BigDecimal OUTSOURCED_DISCOUNT = BigDecimal.valueOf(0.80);
 
-    @Autowired
-    private ProjectMonthlyDataService monthlyDataService;
-
-    @Autowired
-    private ProjectSettlementMapper settlementMapper;
+    private final ProjectMonthlyDataService monthlyDataService;
+    private final ProjectSettlementMapper settlementMapper;
 
     private LocalDateTime toStartOfMonth(LocalDate month) {
         return month.atTime(0, 0, 0);
@@ -52,7 +50,7 @@ public class SettlementService {
         validateOtherCostRatio(monthlyData);
         validateOutsourcedCost(monthlyData);
 
-        ProjectSettlement settlement = findSettlement(projectId, settlementMonthStart);
+        ProjectSettlement settlement = findSettlement(projectId, settlementMonthStart, monthlyData.getCompanyId());
         if (settlement == null) {
             settlement = new ProjectSettlement();
             settlement.setCompanyId(monthlyData.getCompanyId());
@@ -117,7 +115,8 @@ public class SettlementService {
                 BigDecimal actual = BigDecimal.valueOf(actualAmount);
                 BigDecimal diff = actual.subtract(expected).abs();
                 if (diff.compareTo(BigDecimal.valueOf(0.01)) > 0) {
-                    throw new RuntimeException(String.format("外包费用未按80%%折算：原始%.2f，折后%.2f，期望%.2f", originalAmount, actualAmount, expected.doubleValue()));
+                    throw new RuntimeException(
+                            String.format("外包费用未按80%%折算：原始%.2f，折后%.2f，期望%.2f", originalAmount, actualAmount, expected.doubleValue()));
                 }
             }
         } catch (Exception e) {
@@ -129,14 +128,14 @@ public class SettlementService {
     public ProjectSettlement reSettle(Long projectId, LocalDate settlementMonth, Long operatorId) {
         log.info("用户 {} 重新打开项目结算，projectId={}，month={}", operatorId, projectId, settlementMonth);
         LocalDateTime settlementMonthStart = toStartOfMonth(settlementMonth);
-        ProjectSettlement settlement = findSettlement(projectId, settlementMonthStart);
-        if (settlement == null) {
-            throw new RuntimeException("结算记录不存在");
-        }
 
         ProjectMonthlyData monthlyData = monthlyDataService.getProjectMonthlyData(projectId, settlementMonth);
         if (monthlyData == null) {
             throw new RuntimeException("月度数据不存在");
+        }
+        ProjectSettlement settlement = findSettlement(projectId, settlementMonthStart, monthlyData.getCompanyId());
+        if (settlement == null) {
+            throw new RuntimeException("结算记录不存在");
         }
 
         settlement.setCompanyId(monthlyData.getCompanyId());
@@ -153,9 +152,10 @@ public class SettlementService {
         return settlement;
     }
 
-    private ProjectSettlement findSettlement(Long projectId, LocalDateTime settlementMonthStart) {
+    private ProjectSettlement findSettlement(Long projectId, LocalDateTime settlementMonthStart, Long companyId) {
         QueryWrapper<ProjectSettlement> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
+                .eq("company_id", companyId)
                 .eq("settlement_month", settlementMonthStart)
                 .last("limit 1");
         return settlementMapper.selectOne(wrapper);

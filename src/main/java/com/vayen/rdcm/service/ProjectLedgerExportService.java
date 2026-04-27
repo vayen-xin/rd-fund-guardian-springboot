@@ -51,6 +51,7 @@ public class ProjectLedgerExportService {
 
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
+                .eq("company_id", project.getCompanyId())
                 .ge("work_month", startMonth.atDay(1).atStartOfDay())
                 .le("work_month", endMonth.atEndOfMonth().atTime(23, 59, 59))
                 .orderByAsc("work_month");

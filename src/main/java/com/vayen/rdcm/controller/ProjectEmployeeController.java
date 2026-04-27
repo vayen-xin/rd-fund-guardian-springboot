@@ -64,7 +64,10 @@ public class ProjectEmployeeController {
     @SaCheckPermission("project:edit")
     public Result<Void> removeEmployee(@PathVariable Long projectId, @PathVariable Long id) {
         projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
-        employeeService.removeById(id);
+        boolean removed = employeeService.removeByProjectAndId(projectId, id);
+        if (!removed) {
+            return Result.error(404, "关联记录不存在");
+        }
         return Result.success();
     }
 }

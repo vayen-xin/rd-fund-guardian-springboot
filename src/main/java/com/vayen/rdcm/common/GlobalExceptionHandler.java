@@ -52,7 +52,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理业务异常
+     * 处理业务参数异常
      */
     @ExceptionHandler(IllegalArgumentException.class)
     public Result<?> handleIllegalArgument(IllegalArgumentException e) {
@@ -61,12 +61,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * 处理其他异常
+     * 处理兜底异常
      */
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e) {
         log.error("系统异常：{}", e.getMessage(), e);
-        return Result.error(500, "系统异常：" + e.getMessage());
+        return Result.error(500, "系统异常，请联系管理员");
     }
 
     private void recordDenied(String module, String action, String target) {
