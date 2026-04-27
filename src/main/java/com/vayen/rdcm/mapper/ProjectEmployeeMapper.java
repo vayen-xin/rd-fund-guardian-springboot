@@ -16,12 +16,12 @@ public interface ProjectEmployeeMapper extends BaseMapper<ProjectEmployee> {
     /**
      * 查询项目下所有员工
      */
-    @org.apache.ibatis.annotations.Select("SELECT * FROM project_employee WHERE project_id = #{projectId} ORDER BY employee_name")
-    List<ProjectEmployee> findByProjectId(@Param("projectId") Long projectId);
+    @org.apache.ibatis.annotations.Select("SELECT * FROM project_employee WHERE project_id = #{projectId} AND company_id = #{companyId} ORDER BY employee_name")
+    List<ProjectEmployee> findByProjectId(@Param("projectId") Long projectId, @Param("companyId") Long companyId);
     
     /**
      * 删除项目下所有员工（用于项目结束或删除时清理）
      */
-    @org.apache.ibatis.annotations.Delete("DELETE FROM project_employee WHERE project_id = #{projectId}")
-    int deleteByProjectId(@Param("projectId") Long projectId);
+    @org.apache.ibatis.annotations.Delete("DELETE FROM project_employee WHERE project_id = #{projectId} AND company_id = #{companyId}")
+    int deleteByProjectId(@Param("projectId") Long projectId, @Param("companyId") Long companyId);
 }

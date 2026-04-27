@@ -38,8 +38,10 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
 
     @Override
     public ProjectMonthlyData getProjectMonthlyData(Long projectId, LocalDate workMonth) {
+        Project project = projectService.getProjectRecord(projectId);
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
+                .eq("company_id", project.getCompanyId())
                 .eq("work_month", toStartOfMonth(workMonth));
         return this.getOne(wrapper);
     }
@@ -61,21 +63,22 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
             throw new IllegalArgumentException("已结算的月度数据仅允许管理员修改");
         }
 
+        String normalizedCostData = JsonUtils.normalizeCostDataJson(costData);
         double safeGrandTotal = grandTotal == null ? 0.0 : grandTotal;
-        double calculatedTotal = JsonUtils.calculateGrandTotal(costData);
+        double calculatedTotal = JsonUtils.calculateGrandTotal(normalizedCostData);
         if (Math.abs(calculatedTotal - safeGrandTotal) > 0.01) {
             throw new IllegalArgumentException(
                     String.format("JSON 计算总和(%.2f)与传入总金额(%.2f)不一致", calculatedTotal, safeGrandTotal)
             );
         }
 
-        monthlyData.setCostData(costData);
+        monthlyData.setCostData(normalizedCostData);
         monthlyData.setEmployeeData(normalizeJsonArray(employeeData, "月度员工数据格式不正确"));
         monthlyData.setDeviceData(normalizeJsonArray(deviceData, "月度设备数据格式不正确"));
         monthlyData.setGrandTotal(safeGrandTotal);
         monthlyData.setUpdatedAt(LocalDateTime.now());
 
-        JsonUtils.CostData parsed = JsonUtils.parseCostData(costData);
+        JsonUtils.CostData parsed = JsonUtils.parseCostData(normalizedCostData);
         monthlyData.setLaborTotal(parsed.getCategoryTotal("labor"));
         monthlyData.setDirectMaterialTotal(parsed.getCategoryTotal("direct"));
         monthlyData.setDirectFuelTotal(0.0);
@@ -115,13 +118,14 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void inheritFromLastMonth(Long projectId, LocalDate fromMonth, LocalDate toMonth, Long operatorId) {
+        Project project = projectService.getProjectRecord(projectId);
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
+                .eq("company_id", project.getCompanyId())
                 .eq("work_month", toStartOfMonth(fromMonth));
         ProjectMonthlyData lastMonthData = this.getOne(wrapper);
 
         if (lastMonthData == null) {
-            Project project = projectService.getProjectRecord(projectId);
             ProjectMonthlyData newData = new ProjectMonthlyData();
             newData.setCompanyId(project.getCompanyId());
             newData.setProjectId(projectId);
@@ -175,8 +179,10 @@ public class ProjectMonthlyDataServiceImpl extends ServiceImpl<ProjectMonthlyDat
 
     @Override
     public List<ProjectMonthlyData> getProjectMonthlyList(Long projectId) {
+        Project project = projectService.getProjectRecord(projectId);
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
+                .eq("company_id", project.getCompanyId())
                 .orderByDesc("work_month");
         return this.list(wrapper);
     }

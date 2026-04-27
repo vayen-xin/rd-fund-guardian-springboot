@@ -60,7 +60,10 @@ public class ProjectEquipmentController {
     @SaCheckPermission("project:edit")
     public Result<Void> removeEquipment(@PathVariable Long projectId, @PathVariable Long id) {
         projectService.assertProjectAccess(projectId, currentUserService.getCurrentUser());
-        projectEquipmentService.removeById(id);
+        boolean removed = projectEquipmentService.removeByProjectAndId(projectId, id);
+        if (!removed) {
+            return Result.error(404, "关联记录不存在");
+        }
         return Result.success();
     }
 }

@@ -85,9 +85,9 @@ public class ProjectService {
         Project project = getProjectById(projectId, currentUser);
         List<ProjectEmployee> projectEmployees = projectEmployeeService.getByProjectId(projectId);
         List<ProjectEquipment> projectEquipments = projectEquipmentService.getByProjectId(projectId);
-        Map<Long, Device> deviceMap = loadDevices(projectEquipments);
+        Map<Long, Device> deviceMap = loadDevices(projectEquipments, project.getCompanyId());
         List<ProjectOperationLog> logs = loadProjectLogs(projectId, currentUser);
-        ProjectSettlement latestSettlement = loadLatestSettlement(projectId);
+        ProjectSettlement latestSettlement = loadLatestSettlement(projectId, project.getCompanyId());
 
         ProjectDetailResponse response = new ProjectDetailResponse();
         response.setId(project.getId());
@@ -112,7 +112,7 @@ public class ProjectService {
     public MonthlyDataDetailResponse getMonthlyDetail(Long projectId, LocalDate workMonth, CurrentUser currentUser) {
         log.info("公司 {} 用户 {} 查询项目月度详情，projectId={}，月份={}",
                 currentUser.getCompanyId(), currentUser.getUsername(), projectId, workMonth);
-        getProjectById(projectId, currentUser);
+        Project project = getProjectById(projectId, currentUser);
         ProjectMonthlyData monthlyData = getProjectMonthlyDataRecord(projectId, workMonth);
         if (monthlyData == null) {
             throw new IllegalArgumentException("当前月份没有月度数据");
@@ -120,7 +120,7 @@ public class ProjectService {
 
         List<ProjectEmployee> projectEmployees = projectEmployeeService.getByProjectId(projectId);
         List<ProjectEquipment> projectEquipments = projectEquipmentService.getByProjectId(projectId);
-        Map<Long, Device> deviceMap = loadDevices(projectEquipments);
+        Map<Long, Device> deviceMap = loadDevices(projectEquipments, project.getCompanyId());
 
         List<MonthlyDataDetailResponse.EmployeeItem> availableEmployees = projectEmployees.stream()
                 .map(this::toMonthlyEmployeeItem)
@@ -255,7 +255,7 @@ public class ProjectService {
         }
     }
 
-    private Map<Long, Device> loadDevices(List<ProjectEquipment> projectEquipments) {
+    private Map<Long, Device> loadDevices(List<ProjectEquipment> projectEquipments, Long companyId) {
         List<Long> deviceIds = projectEquipments.stream()
                 .map(ProjectEquipment::getDeviceId)
                 .filter(Objects::nonNull)
@@ -265,7 +265,7 @@ public class ProjectService {
             return Map.of();
         }
         QueryWrapper<Device> wrapper = new QueryWrapper<>();
-        wrapper.in("id", deviceIds);
+        wrapper.in("id", deviceIds).eq("company_id", companyId);
         return deviceMapper.selectList(wrapper).stream().collect(Collectors.toMap(Device::getId, item -> item));
     }
 
@@ -279,15 +279,20 @@ public class ProjectService {
         return projectOperationLogMapper.selectList(wrapper);
     }
 
-    private ProjectSettlement loadLatestSettlement(Long projectId) {
+    private ProjectSettlement loadLatestSettlement(Long projectId, Long companyId) {
         QueryWrapper<ProjectSettlement> wrapper = new QueryWrapper<>();
-        wrapper.eq("project_id", projectId).orderByDesc("settlement_month").last("limit 1");
+        wrapper.eq("project_id", projectId)
+                .eq("company_id", companyId)
+                .orderByDesc("settlement_month")
+                .last("limit 1");
         return projectSettlementMapper.selectOne(wrapper);
     }
 
     private ProjectMonthlyData getProjectMonthlyDataRecord(Long projectId, LocalDate workMonth) {
+        Project project = getProjectRecord(projectId);
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
         wrapper.eq("project_id", projectId)
+                .eq("company_id", project.getCompanyId())
                 .eq("work_month", workMonth.atTime(0, 0, 0));
         return projectMonthlyDataMapper.selectOne(wrapper);
     }

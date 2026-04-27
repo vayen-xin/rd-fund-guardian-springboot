@@ -118,9 +118,9 @@ public class AuditExportService {
         }
         Project project = projectService.getProjectById(projectId, currentUser);
         List<AttendanceRecord> attendanceRecords = loadAttendance(project, year, currentUser);
-        List<ProjectMonthlyData> monthlyDataList = loadMonthlyData(projectId, year);
-        List<ExpenseVoucher> vouchers = loadVouchers(projectId, year);
-        Map<Long, Employee> employeeMap = loadProjectEmployees(projectId);
+        List<ProjectMonthlyData> monthlyDataList = loadMonthlyData(project, year);
+        List<ExpenseVoucher> vouchers = loadVouchers(project, year);
+        Map<Long, Employee> employeeMap = loadProjectEmployees(project);
         List<AnnualEmployeeRow> annualEmployees = buildAnnualEmployees(project, attendanceRecords, monthlyDataList, employeeMap);
         Map<Integer, MonthlyBucket> monthlyBuckets = buildMonthlyBuckets(year, attendanceRecords, monthlyDataList, annualEmployees);
         return ExportContext.builder()
@@ -146,18 +146,20 @@ public class AuditExportService {
         return attendanceRecordMapper.selectList(wrapper);
     }
 
-    private List<ProjectMonthlyData> loadMonthlyData(Long projectId, Integer year) {
+    private List<ProjectMonthlyData> loadMonthlyData(Project project, Integer year) {
         QueryWrapper<ProjectMonthlyData> wrapper = new QueryWrapper<>();
-        wrapper.eq("project_id", projectId)
+        wrapper.eq("project_id", project.getId())
+                .eq("company_id", project.getCompanyId())
                 .ge("work_month", LocalDate.of(year, 1, 1).atStartOfDay())
                 .le("work_month", LocalDate.of(year, 12, 31).atTime(23, 59, 59))
                 .orderByAsc("work_month");
         return projectMonthlyDataMapper.selectList(wrapper);
     }
 
-    private List<ExpenseVoucher> loadVouchers(Long projectId, Integer year) {
+    private List<ExpenseVoucher> loadVouchers(Project project, Integer year) {
         QueryWrapper<ExpenseVoucher> wrapper = new QueryWrapper<>();
-        wrapper.eq("project_id", projectId)
+        wrapper.eq("project_id", project.getId())
+                .eq("company_id", project.getCompanyId())
                 .likeRight("`year_month`", year + "-")
                 .orderByAsc("`year_month`")
                 .orderByAsc("category")
@@ -165,14 +167,15 @@ public class AuditExportService {
         return expenseVoucherMapper.selectList(wrapper);
     }
 
-    private Map<Long, Employee> loadProjectEmployees(Long projectId) {
-        List<ProjectEmployee> relations = projectEmployeeService.getByProjectId(projectId);
+    private Map<Long, Employee> loadProjectEmployees(Project project) {
+        List<ProjectEmployee> relations = projectEmployeeService.getByProjectId(project.getId());
         List<Long> employeeIds = relations.stream().map(ProjectEmployee::getEmployeeId).filter(Objects::nonNull).distinct().toList();
         if (employeeIds.isEmpty()) {
             return Map.of();
         }
         QueryWrapper<Employee> wrapper = new QueryWrapper<>();
-        wrapper.in("id", employeeIds);
+        wrapper.in("id", employeeIds)
+                .eq("company_id", project.getCompanyId());
         return employeeMapper.selectList(wrapper).stream()
                 .collect(LinkedHashMap::new, (map, item) -> map.put(item.getId(), item), LinkedHashMap::putAll);
     }

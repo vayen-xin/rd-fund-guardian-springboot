@@ -17,6 +17,9 @@ public class ProjectEquipment {
     @TableId(type = IdType.AUTO)
     private Long id;
 
+    @TableField("company_id")
+    private Long companyId;
+
     @TableField("project_id")
     private Long projectId;
 
